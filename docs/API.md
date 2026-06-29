@@ -1,0 +1,803 @@
+# API.md
+
+# ClinicalOS API Specification
+
+Version: 1.0  
+Project: ClinicalOS  
+Purpose: Define the API structure, service boundaries, endpoint conventions, request/response patterns, permissions, and backend implementation rules for ClinicalOS.
+
+---
+
+## 1. API Philosophy
+
+ClinicalOS uses a Supabase-backed architecture with a Next.js frontend.
+
+The API layer must provide a clean and secure abstraction over:
+
+- Supabase database operations
+- Business Rules
+- Task Engine
+- Clinical Intelligence
+- Enterprise Document Center
+- Analytics
+- Audit Trail
+
+The frontend should never directly implement business logic.
+
+Business logic belongs in:
+
+- Supabase functions
+- server-side actions
+- API routes
+- Business Rules Engine
+- Task Engine services
+
+---
+
+## 2. Core API Principles
+
+1. Every request must be authenticated.
+2. Every request must be scoped by `company_id`.
+3. Site-specific records must be scoped by authorized `site_id`.
+4. Role and permission checks are mandatory.
+5. All important actions must write to Audit Trail.
+6. AI may suggest data, but production writes require review/approval.
+7. API responses must be consistent.
+8. Frontend must not bypass backend validation.
+9. Files must never be exposed through public permanent URLs.
+10. API must be designed for multi-company SaaS from day one.
+
+---
+
+## 3. Standard Response Format
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "data": {},
+  "message": "Operation completed successfully"
+}
+```
+
+### Error Response
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human readable error message",
+    "details": {}
+  }
+}
+```
+
+---
+
+## 4. Standard Error Codes
+
+- `UNAUTHORIZED`
+- `FORBIDDEN`
+- `NOT_FOUND`
+- `VALIDATION_ERROR`
+- `DUPLICATE_RECORD`
+- `BUSINESS_RULE_FAILED`
+- `AI_REVIEW_REQUIRED`
+- `FILE_UPLOAD_FAILED`
+- `INTERNAL_ERROR`
+
+---
+
+## 5. Authentication API
+
+Supabase Auth handles authentication.
+
+### Required Auth Flows
+
+- Sign in
+- Sign out
+- Password reset
+- Invite user
+- Accept invitation
+- Session refresh
+
+### Frontend Rule
+
+After login, the frontend must load:
+
+- user profile
+- company
+- roles
+- permissions
+- authorized sites
+- enabled modules
+
+---
+
+## 6. Companies API
+
+### GET /api/company/current
+
+Returns current user's company.
+
+### PATCH /api/company/settings
+
+Updates company settings.
+
+Permissions:
+
+- Admin only
+
+---
+
+## 7. Users API
+
+### GET /api/users
+
+Returns users in the current company.
+
+Filters:
+
+- role
+- site
+- status
+
+### POST /api/users/invite
+
+Invites a user.
+
+Required:
+
+- email
+- full_name
+- roles
+- sites
+
+Permissions:
+
+- Admin
+
+### PATCH /api/users/:id
+
+Updates user profile, roles, status, or site access.
+
+Permissions:
+
+- Admin
+
+### DELETE /api/users/:id
+
+Soft-deactivates user.
+
+Permissions:
+
+- Admin
+
+---
+
+## 8. Sites API
+
+### GET /api/sites
+
+Returns sites available to the user.
+
+### POST /api/sites
+
+Creates a site.
+
+Permissions:
+
+- Admin
+
+### PATCH /api/sites/:id
+
+Updates a site.
+
+Permissions:
+
+- Admin
+
+---
+
+## 9. Studies API
+
+### GET /api/studies
+
+Returns studies filtered by company and site access.
+
+Filters:
+
+- site_id
+- status
+- sponsor
+- therapeutic_area
+
+### POST /api/studies
+
+Creates a study manually.
+
+Permissions:
+
+- Admin
+
+### POST /api/studies/from-protocol
+
+Uploads protocol and starts AI extraction.
+
+Flow:
+
+1. Upload protocol file.
+2. Create study draft.
+3. Run AI Protocol Agent.
+4. Create proposed Study Profile.
+5. Create proposed Visit Template.
+6. Return review payload.
+
+### POST /api/studies/:id/approve-ai-extraction
+
+Approves AI-generated study draft.
+
+Permissions:
+
+- Admin
+
+### PATCH /api/studies/:id
+
+Updates study.
+
+Permissions:
+
+- Admin
+
+### POST /api/studies/:id/close
+
+Closes study.
+
+Permissions:
+
+- Admin
+
+---
+
+## 10. Visit Templates API
+
+### GET /api/studies/:study_id/visit-templates
+
+Returns templates for a study.
+
+### POST /api/studies/:study_id/visit-templates
+
+Creates visit template manually.
+
+### POST /api/visit-templates/:id/approve
+
+Approves visit template.
+
+### POST /api/visit-templates/:id/archive
+
+Archives visit template.
+
+Rules:
+
+- Never overwrite an approved template.
+- Protocol amendments create new template versions.
+
+---
+
+## 11. Subjects API
+
+### GET /api/subjects
+
+Filters:
+
+- site_id
+- study_id
+- status
+- subject_number
+
+### POST /api/subjects
+
+Creates subject.
+
+Required:
+
+- site_id
+- study_id
+- subject_number
+
+Optional:
+
+- initials
+- screening_date
+- baseline_date
+- randomization_date
+
+Business Rules:
+
+- Validate active study.
+- Validate site is assigned to study.
+- Generate visits if required date exists.
+- Create timeline entry.
+- Create audit log.
+
+### GET /api/subjects/:id
+
+Returns full subject profile.
+
+Includes:
+
+- overview
+- visits
+- charts
+- timeline
+- notes
+- documents
+- history
+
+### PATCH /api/subjects/:id
+
+Updates subject.
+
+### POST /api/subjects/:id/status
+
+Changes subject status.
+
+### POST /api/subjects/:id/notes
+
+Adds note.
+
+### POST /api/subjects/:id/documents
+
+Links document.
+
+---
+
+## 12. Visits API
+
+### GET /api/visits
+
+Filters:
+
+- site_id
+- study_id
+- subject_id
+- status
+- date range
+
+### POST /api/visits/unscheduled
+
+Creates unscheduled visit.
+
+Required:
+
+- subject_id
+- visit_date
+- reason
+
+### PATCH /api/visits/:id/status
+
+Changes visit status.
+
+Important transitions:
+
+- Scheduled → Confirmed
+- Confirmed → In Progress
+- In Progress → Completed
+- Scheduled → Missed
+- Scheduled → Cancelled
+
+### POST /api/visits/:id/reschedule
+
+Reschedules visit.
+
+Payload:
+
+```json
+{
+  "new_date": "2026-07-01",
+  "apply_to": "only_this_visit"
+}
+```
+
+Options:
+
+- only_this_visit
+- this_and_future_visits
+- keep_original_future_schedule
+
+### POST /api/visits/:id/complete
+
+Completes visit.
+
+Business Rules:
+
+- Mark visit completed.
+- Check visit window.
+- Create Chart.
+- Create Data Entry Task.
+- Update Timeline.
+- Update Analytics.
+- Write Audit Log.
+
+---
+
+## 13. Calendar API
+
+### GET /api/calendar/events
+
+Filters:
+
+- site_id
+- date range
+- event_type
+
+### POST /api/calendar/events
+
+Creates manual event.
+
+Allowed event types:
+
+- monitoring_visit
+- sponsor_visit
+- investigator_meeting
+- staff_meeting
+- training
+
+### PATCH /api/calendar/events/:id
+
+Updates event.
+
+### DELETE /api/calendar/events/:id
+
+Soft-cancels event.
+
+Rule:
+
+- Do not hard delete operational events.
+
+---
+
+## 14. Charts API
+
+### GET /api/charts
+
+Filters:
+
+- site_id
+- study_id
+- status
+- priority
+- days pending
+
+### GET /api/charts/queue
+
+Returns prioritized Data Entry queue.
+
+Ordering:
+
+1. Critical overdue
+2. Out of Window
+3. Sponsor Visit related
+4. Remaining charts
+
+### PATCH /api/charts/:id/status
+
+Changes chart status.
+
+### POST /api/charts/:id/mark-entered
+
+Marks chart as Entered in EDC.
+
+Business Rules:
+
+- Set entered_in_edc_date.
+- Set entered_by.
+- Calculate days_until_entry.
+- Complete related task.
+- Update analytics.
+- Write audit log.
+
+### POST /api/charts/:id/comments
+
+Adds comment.
+
+---
+
+## 15. Regulatory API
+
+### GET /api/regulatory/binders
+
+Returns binders by study/site.
+
+### GET /api/regulatory/documents
+
+Filters:
+
+- site_id
+- study_id
+- document_type
+- status
+- expiration range
+
+### POST /api/regulatory/documents
+
+Uploads/links regulatory document.
+
+Flow:
+
+1. Upload file.
+2. Create file record.
+3. Run AI Regulatory Agent.
+4. Extract metadata.
+5. Apply Document Type Rules.
+6. Calculate expiration.
+7. Create renewal tasks if needed.
+
+### POST /api/regulatory/documents/:id/archive
+
+Archives document.
+
+### POST /api/regulatory/documents/:id/version
+
+Uploads new version.
+
+---
+
+## 16. Enterprise Document Center API
+
+### POST /api/files/upload
+
+Uploads file to secure storage.
+
+### GET /api/files/:id
+
+Returns file metadata.
+
+### GET /api/files/:id/signed-url
+
+Returns temporary signed URL.
+
+### POST /api/files/:id/link
+
+Links file to module record.
+
+### GET /api/files/search
+
+Search files using metadata and extracted text.
+
+### POST /api/files/:id/ai-extract
+
+Runs AI extraction.
+
+### POST /api/files/compare
+
+Compares two files using AI.
+
+---
+
+## 17. Task Center API
+
+### GET /api/tasks
+
+Returns tasks assigned to current user or role.
+
+Filters:
+
+- site_id
+- priority
+- status
+- due date
+
+### GET /api/tasks/my-today
+
+Returns today's work queue.
+
+### PATCH /api/tasks/:id/status
+
+Updates task status.
+
+### POST /api/tasks/:id/comments
+
+Adds task comment.
+
+### POST /api/tasks/:id/complete
+
+Completes task and executes completion workflow.
+
+---
+
+## 18. Business Rules API
+
+### GET /api/business-rules
+
+Returns rules.
+
+### POST /api/business-rules
+
+Creates rule.
+
+Permissions:
+
+- Admin
+
+### PATCH /api/business-rules/:id
+
+Updates rule.
+
+### POST /api/business-rules/:id/test
+
+Tests rule against sample data.
+
+### POST /api/business-rules/:id/execute
+
+Executes rule manually.
+
+Permissions:
+
+- Admin
+
+---
+
+## 19. Clinical Intelligence API
+
+### POST /api/ai/protocol/analyze
+
+Runs Protocol Agent.
+
+### POST /api/ai/regulatory/analyze
+
+Runs Regulatory Agent.
+
+### POST /api/ai/subject/review
+
+Runs Subject Agent.
+
+### POST /api/ai/data/review-chart
+
+Runs Data Agent.
+
+### POST /api/ai/analytics/ask
+
+Answers analytics questions.
+
+### POST /api/ai/copilot
+
+General ClinicalOS Copilot.
+
+### POST /api/ai/suggestions
+
+Returns proactive suggestions.
+
+Rule:
+
+AI output requiring data changes must be stored as pending review.
+
+---
+
+## 20. Analytics API
+
+### GET /api/analytics/dashboard
+
+Returns dashboard data by role.
+
+### GET /api/analytics/kpis
+
+Returns KPIs.
+
+### GET /api/analytics/reports
+
+Returns available reports.
+
+### POST /api/analytics/reports/export
+
+Creates export file.
+
+### POST /api/analytics/saved-reports
+
+Saves report configuration.
+
+---
+
+## 21. Audit Trail API
+
+### GET /api/audit-logs
+
+Filters:
+
+- module
+- record_type
+- user_id
+- date range
+- site_id
+
+Permissions:
+
+- Admin
+- CEO limited
+- Regulatory limited to documents
+
+Audit logs must never be editable.
+
+---
+
+## 22. Settings API
+
+### GET /api/settings
+
+Returns company settings.
+
+### PATCH /api/settings
+
+Updates settings.
+
+### GET /api/settings/document-types
+
+Returns document types.
+
+### POST /api/settings/document-types
+
+Creates document type.
+
+### PATCH /api/settings/document-types/:id
+
+Updates document type.
+
+---
+
+## 23. Backend Implementation Rules
+
+Claude must implement services in layers:
+
+- API route
+- Validation
+- Permission check
+- Business Rule evaluation
+- Database operation
+- Task creation
+- Audit log
+- Response
+
+Do not place business logic directly in React components.
+
+---
+
+## 24. Required Backend Services
+
+- AuthService
+- PermissionService
+- SiteAccessService
+- StudyService
+- SubjectService
+- VisitService
+- ChartService
+- RegulatoryService
+- FileService
+- TaskEngine
+- BusinessRuleEngine
+- ClinicalIntelligenceService
+- AnalyticsService
+- AuditService
+
+---
+
+## 25. Final Implementation Instruction
+
+Implement APIs incrementally.
+
+Recommended order:
+
+1. Auth
+2. Companies/Sites/Users
+3. Studies
+4. Subjects
+5. Visits/Calendar
+6. Charts
+7. Task Center
+8. Regulatory/Documents
+9. Business Rules
+10. Clinical Intelligence
+11. Analytics
+12. Audit Trail
+13. Settings
