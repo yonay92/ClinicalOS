@@ -3,12 +3,14 @@
 Persistent AI Assistant available from every page.
 
 Panels:
+
 - Copilot Chat
 - AI Suggestions
 - Pending Reviews
 - Recent Analyses
 
 Agents:
+
 - Protocol
 - Regulatory
 - Subject

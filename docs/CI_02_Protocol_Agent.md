@@ -1,14 +1,17 @@
 # Clinical Intelligence 02 - Protocol Agent
 
 ## Goal
+
 Convert a study protocol into a draft ClinicalOS study.
 
 ## Inputs
+
 - Protocol PDF
 - Amendments
 - Supporting manuals
 
 ## Outputs
+
 - Study profile
 - Visit template
 - Schedule of assessments
@@ -16,6 +19,7 @@ Convert a study protocol into a draft ClinicalOS study.
 - Required documents
 
 ## Rules
+
 - Never activate automatically.
 - Produce confidence score.
 - Highlight uncertain extractions.

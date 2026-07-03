@@ -1,10 +1,12 @@
 # BUSINESS RULES 06 - Regulatory
 
 ## Document Upload
+
 Trigger:
 User uploads document.
 
 Actions:
+
 - Store file.
 - AI extracts metadata.
 - Determine document type.
@@ -12,9 +14,11 @@ Actions:
 - Create renewal task if needed.
 
 ## Expiration
+
 Rules are configurable by document type.
 
 Default notifications:
+
 - 90 days
 - 60 days
 - 30 days
@@ -22,6 +26,7 @@ Default notifications:
 - Expired
 
 ## Document Health Score
+
 100% = all required documents current.
 Missing or expired documents reduce score.
 

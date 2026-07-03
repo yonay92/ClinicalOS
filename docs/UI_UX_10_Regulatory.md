@@ -3,6 +3,7 @@
 ## Regulatory Binder
 
 Sections:
+
 - Essential Documents
 - Staff Documents
 - Study Documents
@@ -10,6 +11,7 @@ Sections:
 - Missing Documents
 
 Indicators:
+
 - Current
 - Expiring
 - Expired
@@ -17,6 +19,7 @@ Indicators:
 Health Score displayed at top.
 
 Actions:
+
 - Upload
 - Replace Version
 - Archive

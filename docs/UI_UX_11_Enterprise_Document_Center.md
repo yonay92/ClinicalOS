@@ -3,10 +3,12 @@
 Global repository for all files.
 
 Views:
+
 - List
 - Grid
 
 Features:
+
 - Search
 - Filters
 - Version History
@@ -14,6 +16,7 @@ Features:
 - Linked Records
 
 Preview Panel:
+
 - Metadata
 - OCR Text
 - Related Study

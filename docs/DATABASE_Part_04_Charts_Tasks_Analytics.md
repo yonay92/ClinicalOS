@@ -1,5 +1,7 @@
 # DATABASE_Part_04.md
+
 # ClinicalOS Database Architecture — Part 04
+
 ## Charts, Data Entry, Task Center, Analytics
 
 Version: 1.0  

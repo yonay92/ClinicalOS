@@ -1,10 +1,13 @@
 # BUSINESS RULES 01 - Core Workflow
 
 ## Purpose
+
 Business Rules is the execution engine of ClinicalOS. Users perform actions, Business Rules evaluate conditions, and the system creates the next operational step.
 
 ## Rule Engine
+
 Every rule contains:
+
 - Trigger
 - Conditions
 - Actions
@@ -22,6 +25,7 @@ Event
 → Audit Trail
 
 ## Global Rules
+
 1. Every important event is evaluated.
 2. Rules execute before notifications.
 3. AI never bypasses Business Rules.
@@ -29,6 +33,7 @@ Event
 5. Rules are company-specific.
 
 ## Event Sources
+
 - Subject
 - Visit
 - Chart
@@ -39,6 +44,7 @@ Event
 - Calendar
 
 ## Action Types
+
 - Create Task
 - Update Status
 - Create Visit

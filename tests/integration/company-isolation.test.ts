@@ -1,0 +1,258 @@
+/**
+ * Integration tests: company isolation
+ *
+ * Verifies that every service method scopes all queries to the authenticated
+ * user's company_id and never leaks data across company boundaries.
+ * Tests mock the Supabase client and assert that .eq('company_id', ...) is
+ * always called before data is returned.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { UserService } from '@/services/users/UserService';
+import { SiteService } from '@/services/sites/SiteService';
+import { CompanyService } from '@/services/company/CompanyService';
+import { PermissionService } from '@/services/permissions/PermissionService';
+import { NotFoundError } from '@/lib/api/errors';
+
+// ── helpers ────────────────────────────────────────────────────────────────
+
+const COMPANY_A = 'company-a-uuid';
+const COMPANY_B = 'company-b-uuid';
+const USER_A = 'user-a-uuid';
+
+function makeCtx(companyId: string, userId = USER_A) {
+  return {
+    user: {
+      id: userId,
+      company_id: companyId,
+      full_name: 'Test User',
+      email: 'test@example.com',
+      phone: null,
+      avatar_file_id: null,
+      status: 'active' as const,
+      last_login_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    company: {
+      id: companyId,
+      name: 'Test Company',
+      legal_name: null,
+      status: 'active' as const,
+      subscription_plan: null,
+      timezone: 'UTC',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  };
+}
+
+/** Records every .eq() call so we can assert company_id scoping. */
+function makeTrackingClient(data: unknown = [], error: unknown = null) {
+  const eqCalls: Array<[string, unknown]> = [];
+
+  const chain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockImplementation((col: string, val: unknown) => {
+      eqCalls.push([col, val]);
+      return chain;
+    }),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    maybeSingle: vi
+      .fn()
+      .mockResolvedValue({ data: Array.isArray(data) ? (data[0] ?? null) : data, error }),
+    single: vi
+      .fn()
+      .mockResolvedValue({ data: Array.isArray(data) ? (data[0] ?? null) : data, error }),
+    insert: vi.fn().mockReturnThis(),
+    update: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    // resolve for list queries
+    then: undefined as unknown,
+  };
+
+  // Make the chain thenable so `await supabase.from(...).select(...).eq(...)` works
+  const makeThenable = () => {
+    chain.then = undefined;
+    const promise = Promise.resolve({ data, error });
+    Object.assign(chain, {
+      then: promise.then.bind(promise),
+      catch: promise.catch.bind(promise),
+      finally: promise.finally.bind(promise),
+    });
+    return chain;
+  };
+
+  makeThenable();
+
+  const fromFn = vi.fn().mockReturnValue(chain);
+  const client = { from: fromFn } as never;
+
+  return { client, eqCalls, fromFn };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+// ── UserService ────────────────────────────────────────────────────────────
+
+describe('UserService — company isolation', () => {
+  it('list() always filters by company_id from context', async () => {
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await UserService.list(makeCtx(COMPANY_A));
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('list() uses context company_id, not a client-supplied one', async () => {
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    // Even if caller passes company B context, only B's data is queried
+    await UserService.list(makeCtx(COMPANY_B));
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq![1]).toBe(COMPANY_B);
+    expect(companyEq![1]).not.toBe(COMPANY_A);
+  });
+
+  it('getById() scopes query to company_id from context', async () => {
+    const userRow = {
+      id: 'u1',
+      company_id: COMPANY_A,
+      full_name: 'Alice',
+      email: 'a@a.com',
+      phone: null,
+      avatar_file_id: null,
+      status: 'active',
+      last_login_at: null,
+      created_at: '',
+      updated_at: '',
+    };
+    const { client, eqCalls } = makeTrackingClient(userRow);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await UserService.getById('u1', makeCtx(COMPANY_A));
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('getById() throws NotFoundError when record belongs to different company', async () => {
+    // Simulate DB returning no row (RLS / company_id filter zeroed the result)
+    const { client } = makeTrackingClient(null, null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(UserService.getById('u-other-company', makeCtx(COMPANY_A))).rejects.toThrow(
+      NotFoundError,
+    );
+  });
+});
+
+// ── SiteService ────────────────────────────────────────────────────────────
+
+describe('SiteService — company isolation', () => {
+  it('list() with view_all_sites filters by company_id', async () => {
+    // Call 1: SiteService.list()'s own supabase → sites query (tracked for company_id eq)
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(client);
+    // Call 2: hasPermission's supabase → rpc → true
+    const rpcClient = { rpc: vi.fn().mockResolvedValue({ data: true }) };
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(rpcClient as never);
+
+    await SiteService.list(makeCtx(COMPANY_A));
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('getById() throws NotFoundError when site belongs to different company', async () => {
+    // Call 1: canAccessSite's own client (placeholder — .from() not reached since hasAllSites=true)
+    const { client: placeholder } = makeTrackingClient(null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(placeholder);
+    // Call 2: hasPermission → rpc → true
+    const rpcClient = { rpc: vi.fn().mockResolvedValue({ data: true }) };
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(rpcClient as never);
+    // Call 3: SiteService.getById → site query → null (company_id filter excludes it)
+    const { client } = makeTrackingClient(null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(client);
+
+    await expect(SiteService.getById('site-other', makeCtx(COMPANY_A))).rejects.toThrow(
+      NotFoundError,
+    );
+  });
+});
+
+// ── CompanyService ─────────────────────────────────────────────────────────
+
+describe('CompanyService — company isolation', () => {
+  it('getCurrent() queries by the exact company_id provided', async () => {
+    const row = {
+      id: COMPANY_A,
+      name: 'Acme',
+      legal_name: null,
+      status: 'active',
+      subscription_plan: null,
+      timezone: 'UTC',
+      created_at: '',
+      updated_at: '',
+    };
+    const { client, eqCalls } = makeTrackingClient(row);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await CompanyService.getCurrent(COMPANY_A);
+
+    const idEq = eqCalls.find(([col]) => col === 'id');
+    expect(idEq![1]).toBe(COMPANY_A);
+  });
+
+  it('getCurrent() throws NotFoundError when company does not exist', async () => {
+    const { client } = makeTrackingClient(null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(CompanyService.getCurrent('nonexistent-company')).rejects.toThrow(NotFoundError);
+  });
+
+  it('getSettings() scopes query to the provided company_id', async () => {
+    const { client, eqCalls } = makeTrackingClient(null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await CompanyService.getSettings(COMPANY_A);
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+});
+
+// ── PermissionService — cross-company guard ────────────────────────────────
+
+describe('PermissionService — company isolation', () => {
+  it('validateUserExists() throws NotFoundError for user in a different company', async () => {
+    // DB returns null row (company_id filter excludes cross-company user)
+    const { client } = makeTrackingClient(null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(PermissionService.validateUserExists(USER_A, COMPANY_B)).rejects.toThrow(
+      NotFoundError,
+    );
+  });
+
+  it('validateUserExists() scopes query to the provided company_id', async () => {
+    const row = { id: USER_A, company_id: COMPANY_A };
+    const { client, eqCalls } = makeTrackingClient(row);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await PermissionService.validateUserExists(USER_A, COMPANY_A);
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+});

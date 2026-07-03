@@ -1,5 +1,7 @@
 # DATABASE_Part_01.md
+
 # ClinicalOS Database Architecture — Part 01
+
 ## Core SaaS, Users, Roles, Permissions, Sites
 
 Version: 1.0  

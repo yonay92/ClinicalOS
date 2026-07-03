@@ -9,13 +9,13 @@ the reference that all developers must follow.
 
 ## Architectural Principles
 
--   Multi-tenant SaaS
--   Modular architecture
--   Automation-first
--   AI-assisted workflows
--   Secure by default
--   Event-driven operations
--   Complete auditability
+- Multi-tenant SaaS
+- Modular architecture
+- Automation-first
+- AI-assisted workflows
+- Secure by default
+- Event-driven operations
+- Complete auditability
 
 ## Core Components
 
@@ -96,10 +96,10 @@ Updated
 
 Every request is filtered by:
 
--   company_id
--   site_id
--   role permissions
--   row level security
+- company_id
+- site_id
+- role permissions
+- row level security
 
 ## AI Integration
 
@@ -114,11 +114,11 @@ Update
 
 The architecture must support:
 
--   Unlimited companies
--   Unlimited sites
--   Millions of subjects
--   Millions of visits
--   Millions of documents
+- Unlimited companies
+- Unlimited sites
+- Millions of subjects
+- Millions of visits
+- Millions of documents
 
 No module may contain company-specific logic.
 

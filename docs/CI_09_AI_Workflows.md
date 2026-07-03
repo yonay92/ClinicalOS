@@ -1,6 +1,7 @@
 # Clinical Intelligence 09 - AI Workflows
 
 ## Protocol Workflow
+
 Upload Protocol
 → Protocol Agent
 → Draft Study
@@ -8,6 +9,7 @@ Upload Protocol
 → Approval
 
 ## Regulatory Workflow
+
 Upload Document
 → Regulatory Agent
 → Metadata
@@ -15,6 +17,7 @@ Upload Document
 → Renewal Task
 
 ## Data Workflow
+
 Completed Visit
 → Data Agent
 → Chart Priority

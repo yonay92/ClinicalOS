@@ -1,12 +1,15 @@
 # UI/UX 08 - Visits
 
 ## Visit Calendar
+
 Views:
+
 - Month
 - Week
 - Day
 
 ## Visit Detail
+
 - Target Date
 - Window
 - Actual Date
@@ -14,6 +17,7 @@ Views:
 - Related Subject
 
 ## Actions
+
 - Confirm
 - Start
 - Complete

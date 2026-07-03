@@ -1,5 +1,7 @@
 # DATABASE_Part_02.md
+
 # ClinicalOS Database Architecture — Part 02
+
 ## Studies, Study Sites, Study Staff, Visit Templates, Study Documents
 
 Version: 1.0  
@@ -163,11 +165,11 @@ visit_template_items
 
 ### Example
 
-| Visit | Offset | Window |
-|---|---:|---|
-| Baseline | 0 | 0 |
-| Week 4 | 28 | ±7 |
-| Week 8 | 56 | ±7 |
+| Visit    | Offset | Window |
+| -------- | -----: | ------ |
+| Baseline |      0 | 0      |
+| Week 4   |     28 | ±7     |
+| Week 8   |     56 | ±7     |
 
 ---
 

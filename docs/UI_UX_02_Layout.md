@@ -8,6 +8,7 @@ Workspace
 Status Bar
 
 ## Sidebar Modules
+
 - Dashboard
 - Task Center
 - Calendar
@@ -20,7 +21,9 @@ Status Bar
 - Settings
 
 ## Workspace
+
 Every module uses:
+
 - Header
 - Toolbar
 - Filters

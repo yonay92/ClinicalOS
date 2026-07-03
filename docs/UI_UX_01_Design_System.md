@@ -1,9 +1,11 @@
 # UI/UX 01 - Design System
 
 ## Purpose
+
 Define the visual language of ClinicalOS.
 
 ## Design Principles
+
 - Clean
 - Minimal
 - Enterprise
@@ -12,6 +14,7 @@ Define the visual language of ClinicalOS.
 - Consistent
 
 ## Color Palette
+
 Primary: Blue
 Success: Green
 Warning: Amber
@@ -20,11 +23,13 @@ Background: White
 Surface: Light Gray
 
 ## Typography
+
 Primary font: Inter
 Headings: Bold
 Body: Regular
 
 ## UI Rules
+
 - Max 3 clicks for common actions.
 - Consistent spacing.
 - Reusable components only.

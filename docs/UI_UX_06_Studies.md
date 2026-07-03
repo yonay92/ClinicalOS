@@ -1,13 +1,16 @@
 # UI/UX 06 - Studies
 
 ## Study List
+
 Filters:
+
 - Sponsor
 - Status
 - Site
 - Therapeutic Area
 
 ## Study Profile Tabs
+
 - Overview
 - Sites
 - Subjects
@@ -18,6 +21,7 @@ Filters:
 - Timeline
 
 ## Primary Actions
+
 - Upload Protocol
 - Assign Sites
 - Activate Study

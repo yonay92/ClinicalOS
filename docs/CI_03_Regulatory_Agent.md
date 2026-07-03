@@ -1,9 +1,11 @@
 # Clinical Intelligence 03 - Regulatory Agent
 
 ## Goal
+
 Analyze uploaded regulatory documents.
 
 Functions
+
 - Detect document type
 - Read expiration dates
 - Identify versions

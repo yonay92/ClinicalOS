@@ -1,0 +1,58 @@
+export type Role = {
+  id: string;
+  company_id: string;
+  name: string;
+  key: string;
+  description: string | null;
+  is_system_role: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserRole = {
+  id: string;
+  company_id: string;
+  user_id: string;
+  role_id: string;
+  created_at: string;
+};
+
+export type Permission = {
+  id: string;
+  key: string;
+  module: string;
+  description: string | null;
+  created_at: string;
+};
+
+export type RolePermission = {
+  id: string;
+  company_id: string;
+  role_id: string;
+  permission_id: string;
+  allowed: boolean;
+  created_at: string;
+};
+
+export type SystemRoleKey = 'admin' | 'ceo' | 'crc' | 'data_entry' | 'regulatory' | 'pi';
+
+export type PermissionKey =
+  | 'view_dashboard'
+  | 'create_study'
+  | 'edit_study'
+  | 'create_subject'
+  | 'edit_subject'
+  | 'view_subjects'
+  | 'view_charts'
+  | 'mark_chart_ready'
+  | 'mark_chart_entered'
+  | 'upload_regulatory_document'
+  | 'edit_regulatory_document'
+  | 'edit_business_rules'
+  | 'view_all_sites'
+  | 'manage_users'
+  | 'view_audit_logs'
+  | 'manage_sites'
+  | 'manage_studies'
+  | 'manage_settings'
+  | 'view_analytics';

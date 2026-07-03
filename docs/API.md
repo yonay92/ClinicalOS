@@ -103,6 +103,34 @@ Supabase Auth handles authentication.
 - Accept invitation
 - Session refresh
 
+### POST /api/invitations/accept
+
+Accepts an invitation and creates the user account.
+
+Auth: None — this is a public endpoint. The `token` is the credential.
+
+Required:
+
+- token
+- full_name
+- password
+
+On success: creates Supabase auth user, profile record, assigns roles and sites, marks invitation accepted.
+
+Response: `{ user_id, session }`
+
+### GET /api/invitations/validate
+
+Validates an invitation token before showing the acceptance form.
+
+Auth: None — public endpoint.
+
+Query:
+
+- token
+
+Response: `{ valid: true/false, email }` — never returns the full invitation record.
+
 ### Frontend Rule
 
 After login, the frontend must load:
@@ -151,9 +179,38 @@ Invites a user.
 Required:
 
 - email
-- full_name
-- roles
-- sites
+- role_ids (array of UUID)
+- site_ids (array of UUID)
+
+Note: `full_name` is NOT collected at invite time. The invitee enters their own name during account setup via `POST /api/invitations/accept`.
+
+Permissions:
+
+- Admin
+
+### GET /api/users/invitations
+
+Returns all invitations for the current company.
+
+Query filters:
+
+- status (pending | accepted | expired | revoked)
+
+Permissions:
+
+- Admin
+
+### DELETE /api/users/invitations/:id
+
+Revokes a pending invitation.
+
+Permissions:
+
+- Admin
+
+### POST /api/users/invitations/:id/resend
+
+Resends an invitation email with a refreshed token and extended expiry.
 
 Permissions:
 
@@ -324,17 +381,26 @@ Business Rules:
 
 ### GET /api/subjects/:id
 
-Returns full subject profile.
+Returns full subject profile (overview tab only by default).
 
 Includes:
 
 - overview
-- visits
+- visits (lazy-loaded — pass `?include=visits` or use dedicated endpoint below)
 - charts
 - timeline
 - notes
 - documents
 - history
+
+### GET /api/subjects/:id/visits
+
+Returns all visits for a subject. Used by the Subject Profile Visits tab.
+
+Filters:
+
+- status
+- date range
 
 ### PATCH /api/subjects/:id
 
@@ -535,6 +601,16 @@ Flow:
 6. Calculate expiration.
 7. Create renewal tasks if needed.
 
+### PATCH /api/regulatory/documents/:id
+
+Updates regulatory document metadata (document name, version, effective date, expiration date, document type).
+
+Use case: correcting metadata before or after AI review, without creating a new version.
+
+Permissions:
+
+- Regulatory
+
 ### POST /api/regulatory/documents/:id/archive
 
 Archives document.
@@ -722,7 +798,46 @@ Audit logs must never be editable.
 
 ---
 
-## 22. Settings API
+## 22. Notifications API
+
+### GET /api/notifications
+
+Returns the current user's notifications, most recent first.
+
+Query filters:
+
+- is_read (true | false)
+- limit (default 50)
+
+### GET /api/notifications/unread-count
+
+Returns the count of unread notifications for the current user.
+
+Response: `{ count: number }`
+
+### PATCH /api/notifications/:id/read
+
+Marks one notification as read.
+
+### POST /api/notifications/mark-all-read
+
+Marks all of the current user's notifications as read.
+
+### GET /api/notifications/preferences
+
+Returns all notification preferences for the current user.
+
+Response: array of `{ event_type, in_app, email }`
+
+### PUT /api/notifications/preferences/:event_type
+
+Updates notification channel preferences for one event type.
+
+Body: `{ in_app: boolean, email: boolean }`
+
+---
+
+## 23. Settings API
 
 ### GET /api/settings
 
@@ -766,6 +881,7 @@ Do not place business logic directly in React components.
 ## 24. Required Backend Services
 
 - AuthService
+- InvitationService
 - PermissionService
 - SiteAccessService
 - StudyService
@@ -774,10 +890,11 @@ Do not place business logic directly in React components.
 - ChartService
 - RegulatoryService
 - FileService
-- TaskEngine
+- TaskService
 - BusinessRuleEngine
 - ClinicalIntelligenceService
 - AnalyticsService
+- NotificationService
 - AuditService
 
 ---

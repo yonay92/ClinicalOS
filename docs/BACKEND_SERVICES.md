@@ -107,10 +107,28 @@ Responsibilities
 Responsibilities
 
 - CRUD users
-- Invitations
 - Role assignment
 - Site assignment
 - User status
+
+---
+
+# InvitationService
+
+Responsibilities
+
+- Send invitation (generates token, stores user_invitations record, emails invitee)
+- Validate invitation token (public — no auth required)
+- Accept invitation (creates auth.users record, profile, assigns roles and sites)
+- Revoke invitation (admin only)
+- Resend invitation (resets token and expiry)
+- Expire stale invitations (cron — runs daily)
+
+Integration:
+
+- Calls NotificationService to send the invitation email
+- Calls AuditService on every state change
+- On acceptance: calls UserService to create profile, assign roles and sites
 
 ---
 

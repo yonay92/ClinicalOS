@@ -3,11 +3,13 @@
 ## Subject Creation
 
 Required:
+
 - Site
 - Study
 - Subject Number
 
 Actions:
+
 - Validate Study is active.
 - Validate Site assignment.
 - Create Subject.
@@ -31,6 +33,7 @@ Early Terminated
 Lost to Follow Up
 
 Every status change:
+
 - Update timeline.
 - Write audit log.
 - Recalculate analytics.
@@ -38,6 +41,7 @@ Every status change:
 ## Subject Completion
 
 When End of Study is completed:
+
 - Close remaining visits.
 - Close remaining charts.
 - Complete open subject tasks.

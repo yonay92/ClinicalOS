@@ -1,0 +1,21 @@
+-- Seed: 003_role_permissions.sql
+-- Description: Default role-permission assignments seeded per-company at provisioning.
+-- Applied by CompanyService.provision(company_id) after roles and permissions exist.
+--
+-- Pattern (executed per company with the company's freshly-seeded role IDs):
+--
+-- Admin — all permissions
+-- CEO   — view_dashboard, view_studies, view_subjects, view_visits, view_charts,
+--          view_regulatory, view_documents, view_analytics, view_audit_logs
+-- CRC   — view_dashboard, view_studies, view_subjects, create_subject, edit_subject,
+--          view_visits, manage_visits, mark_chart_ready, view_charts,
+--          view_regulatory, view_documents, view_tasks, complete_task
+-- Data Entry — view_dashboard, view_charts, mark_chart_entered, view_tasks, complete_task
+-- Regulatory — view_dashboard, view_regulatory, upload_regulatory_document,
+--              edit_regulatory_document, archive_regulatory_document,
+--              view_documents, upload_documents, view_tasks, complete_task
+-- PI   — view_dashboard, view_studies, view_subjects, view_visits, view_regulatory
+
+-- This seed file is used as documentation by CompanyService.
+-- The actual SQL is generated dynamically in CompanyService.provision() using the
+-- permission keys defined here.

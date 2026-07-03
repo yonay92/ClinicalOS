@@ -3,6 +3,7 @@
 # ClinicalOS Testing Strategy
 
 ## Test Types
+
 - Unit Tests
 - Integration Tests
 - End-to-End Tests
@@ -11,6 +12,7 @@
 - AI Validation Tests
 
 ## Critical Workflows
+
 - Authentication
 - Subject Creation
 - Visit Completion
@@ -21,16 +23,20 @@
 - Business Rules
 
 ## Acceptance Criteria
+
 Every feature must:
+
 - Pass tests
 - Respect permissions
 - Write Audit Trail
 - Update Analytics where applicable
 
 ## Recommended Tools
+
 - Vitest
 - Playwright
 - React Testing Library
 
 ## Final Rule
+
 No feature is complete until automated tests pass.

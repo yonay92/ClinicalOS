@@ -158,10 +158,10 @@ Store every schema change as SQL migration.
 Suggested folders:
 
 /supabase
-  /migrations
-  /seed
-  /functions
-  /policies
+/migrations
+/seed
+/functions
+/policies
 
 Never modify production schema manually.
 

@@ -13,6 +13,7 @@ Build ClinicalOS incrementally using a modular architecture. Every sprint must p
 # Phase 0 - Project Foundation
 
 Goals:
+
 - Create GitHub repository
 - Configure Next.js
 - Configure TypeScript
@@ -31,6 +32,7 @@ Running empty application with authentication.
 # Sprint 1 - Authentication & SaaS Foundation
 
 Modules:
+
 - Login
 - Logout
 - Invite Users
@@ -41,6 +43,7 @@ Modules:
 - User Profiles
 
 Deliverables:
+
 - Multi-tenant authentication
 - Row Level Security
 - Company isolation
@@ -51,6 +54,7 @@ Deliverables:
 # Sprint 2 - Study Management
 
 Modules:
+
 - Studies
 - Study Sites
 - Study Staff
@@ -58,6 +62,7 @@ Modules:
 - Protocol Upload
 
 Deliverables:
+
 - Manual Study Creation
 - AI Draft Study Creation
 - Visit Template Builder
@@ -67,6 +72,7 @@ Deliverables:
 # Sprint 3 - Subject Management
 
 Modules:
+
 - Subjects
 - Timeline
 - Notes
@@ -74,6 +80,7 @@ Modules:
 - Status History
 
 Deliverables:
+
 - Subject Profile
 - Subject Lifecycle
 - Timeline
@@ -83,6 +90,7 @@ Deliverables:
 # Sprint 4 - Visits & Calendar
 
 Modules:
+
 - Scheduled Visits
 - Unscheduled Visits
 - Calendar
@@ -90,6 +98,7 @@ Modules:
 - Monitoring Visits
 
 Deliverables:
+
 - Automatic Visit Generation
 - Calendar
 - Visit Windows
@@ -99,12 +108,14 @@ Deliverables:
 # Sprint 5 - Charts & Data Entry
 
 Modules:
+
 - Chart Queue
 - Chart Profile
 - Data Entry Workflow
 - Chart Metrics
 
 Deliverables:
+
 - Automatic Chart Creation
 - Queue Prioritization
 - Entered in EDC workflow
@@ -114,12 +125,14 @@ Deliverables:
 # Sprint 6 - Regulatory
 
 Modules:
+
 - Regulatory Binder
 - Staff Documents
 - Study Documents
 - Versioning
 
 Deliverables:
+
 - Regulatory Health Score
 - Expiration Tracking
 
@@ -128,6 +141,7 @@ Deliverables:
 # Sprint 7 - Enterprise Document Center
 
 Modules:
+
 - Secure File Storage
 - OCR
 - AI Metadata
@@ -142,6 +156,7 @@ Single document repository.
 # Sprint 8 - Task Engine
 
 Modules:
+
 - Tasks
 - Assignment
 - Prioritization
@@ -156,6 +171,7 @@ Operational work queue.
 # Sprint 9 - Business Rules
 
 Modules:
+
 - Rule Builder
 - Rule Execution
 - Rule Logs
@@ -168,6 +184,7 @@ Configurable automation engine.
 # Sprint 10 - Clinical Intelligence
 
 Agents:
+
 - Protocol
 - Regulatory
 - Subject
@@ -184,6 +201,7 @@ AI integrated across ClinicalOS.
 # Sprint 11 - Analytics
 
 Modules:
+
 - Executive Dashboard
 - Operational KPIs
 - Reports
@@ -197,6 +215,7 @@ Interactive analytics.
 # Sprint 12 - Settings
 
 Modules:
+
 - Company Settings
 - Notification Settings
 - Document Types
@@ -207,6 +226,7 @@ Modules:
 # Sprint 13 - Security Hardening
 
 Tasks:
+
 - Security Audit
 - Performance Testing
 - RLS Review
@@ -218,6 +238,7 @@ Tasks:
 # Sprint 14 - Production Readiness
 
 Tasks:
+
 - Documentation
 - Backup Strategy
 - Monitoring
@@ -281,8 +302,9 @@ Never bypass Business Rules.
 Never bypass Security.
 
 Every module must integrate with:
+
 - Audit Trail
 - Task Engine
 - Analytics
 - Clinical Intelligence
-where applicable.
+  where applicable.

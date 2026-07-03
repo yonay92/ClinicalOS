@@ -3,6 +3,7 @@
 Task Engine is the operational heart of ClinicalOS.
 
 ## Automatic Task Sources
+
 - Completed Visit
 - Expiring Document
 - AI Recommendation
@@ -11,6 +12,7 @@ Task Engine is the operational heart of ClinicalOS.
 - Manual Admin Task
 
 ## Ordering
+
 1. Critical overdue items
 2. Out of Window visits
 3. Sponsor-related work

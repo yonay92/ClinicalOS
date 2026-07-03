@@ -1,9 +1,11 @@
 # UI/UX 04 - Dashboard
 
 ## Goal
+
 Show users exactly what needs attention.
 
 ## Widgets
+
 - Today's Tasks
 - Critical Alerts
 - Visits Today

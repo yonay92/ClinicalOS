@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);const f=j.tool_input&&j.tool_input.file_path;if(!f||!require('fs').existsSync('package.json'))return;require('child_process').execSync('pnpm run format -- '+JSON.stringify(f),{stdio:'inherit',shell:true})}catch(e){}});\" 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Formatting..."
+          }
+        ]
+      }
+    ]
+  }
+}

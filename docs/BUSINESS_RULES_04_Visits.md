@@ -6,6 +6,7 @@ Trigger:
 Subject created.
 
 Actions:
+
 - Read approved Visit Template.
 - Generate all scheduled visits.
 - Calculate target dates.
@@ -17,6 +18,7 @@ Actions:
 Users may create an unscheduled visit.
 
 Rules:
+
 - Must belong to an existing subject.
 - Appears in Calendar.
 - Creates Chart after completion.
@@ -28,6 +30,7 @@ Trigger:
 Status = Completed
 
 Actions:
+
 - Create Chart.
 - Create Data Entry Task.
 - Update Timeline.
@@ -36,6 +39,7 @@ Actions:
 ## Out of Window
 
 If completion date is outside visit window:
+
 - Mark Out of Window.
 - Increase chart priority.
 - Notify CRC.
