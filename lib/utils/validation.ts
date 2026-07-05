@@ -184,6 +184,71 @@ export const createVisitTemplateSchema = z.object({
 
 export type CreateVisitTemplateSchema = z.infer<typeof createVisitTemplateSchema>;
 
+// ── Subjects ──────────────────────────────────────────────────────────────────
+
+export const createSubjectSchema = z.object({
+  site_id: z.string().uuid('Invalid site ID'),
+  study_id: z.string().uuid('Invalid study ID'),
+  subject_number: z.string().min(1, 'Subject number is required').max(50).trim(),
+  initials: z.string().max(10).trim().optional(),
+  screening_date: z.string().date().optional(),
+  baseline_date: z.string().date().optional(),
+  randomization_date: z.string().date().optional(),
+});
+
+export type CreateSubjectSchema = z.infer<typeof createSubjectSchema>;
+
+export const updateSubjectSchema = z.object({
+  initials: z.string().max(10).trim().optional(),
+  screening_date: z.string().date().optional(),
+  baseline_date: z.string().date().optional(),
+  randomization_date: z.string().date().optional(),
+  end_of_study_date: z.string().date().optional(),
+});
+
+export type UpdateSubjectSchema = z.infer<typeof updateSubjectSchema>;
+
+export const changeSubjectStatusSchema = z.object({
+  status: z.enum([
+    'pre_screening',
+    'screening',
+    'screen_failed',
+    'randomized',
+    'active',
+    'completed',
+    'early_terminated',
+    'lost_to_follow_up',
+  ]),
+  reason: z.string().max(1000).trim().optional(),
+});
+
+export type ChangeSubjectStatusSchema = z.infer<typeof changeSubjectStatusSchema>;
+
+export const addSubjectNoteSchema = z.object({
+  note: z.string().min(1, 'Note text is required').max(5000).trim(),
+  visibility: z.enum(['internal', 'crc_only', 'admin_only']).optional(),
+});
+
+export type AddSubjectNoteSchema = z.infer<typeof addSubjectNoteSchema>;
+
+export const listSubjectsSchema = z.object({
+  study_id: z.string().uuid().optional(),
+  site_id: z.string().uuid().optional(),
+  status: z
+    .enum([
+      'pre_screening',
+      'screening',
+      'screen_failed',
+      'randomized',
+      'active',
+      'completed',
+      'early_terminated',
+      'lost_to_follow_up',
+    ])
+    .optional(),
+  subject_number: z.string().max(50).optional(),
+});
+
 // ── Invitations list filter ───────────────────────────────────────────────────
 
 export const listInvitationsSchema = z.object({

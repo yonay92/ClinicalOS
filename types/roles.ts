@@ -45,6 +45,8 @@ export type PermissionKey =
   | 'create_subject'
   | 'edit_subject'
   | 'view_subjects'
+  | 'view_visits'
+  | 'manage_visits'
   | 'view_charts'
   | 'mark_chart_ready'
   | 'mark_chart_entered'

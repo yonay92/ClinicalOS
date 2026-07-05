@@ -1,0 +1,170 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { AlertBanner } from '@/components/ui/AlertBanner';
+import type { Subject } from '@/types/subjects';
+import type { Study } from '@/types/studies';
+import type { Site } from '@/types/sites';
+
+type SubjectForm = {
+  study_id: string;
+  site_id: string;
+  subject_number: string;
+  initials: string;
+  screening_date: string;
+  baseline_date: string;
+  randomization_date: string;
+};
+
+const EMPTY_FORM: SubjectForm = {
+  study_id: '',
+  site_id: '',
+  subject_number: '',
+  initials: '',
+  screening_date: '',
+  baseline_date: '',
+  randomization_date: '',
+};
+
+export default function NewSubjectPage() {
+  const router = useRouter();
+  const [form, setForm] = useState<SubjectForm>(EMPTY_FORM);
+  const [studies, setStudies] = useState<Study[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const [studiesRes, sitesRes] = await Promise.all([
+        fetch('/api/studies?status=active'),
+        fetch('/api/sites'),
+      ]);
+      if (studiesRes.ok) setStudies(((await studiesRes.json()) as { data: Study[] }).data);
+      if (sitesRes.ok) setSites(((await sitesRes.json()) as { data: Site[] }).data);
+    })();
+  }, []);
+
+  function stripEmpty(f: SubjectForm): Record<string, string> {
+    return Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '')) as Record<
+      string,
+      string
+    >;
+  }
+
+  async function handleSave() {
+    if (!form.study_id) {
+      setError('Study is required');
+      return;
+    }
+    if (!form.site_id) {
+      setError('Site is required');
+      return;
+    }
+    if (!form.subject_number.trim()) {
+      setError('Subject number is required');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/subjects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stripEmpty(form)),
+      });
+      const json = (await res.json()) as { success: boolean; data?: Subject; message?: string };
+      if (!res.ok || !json.success || !json.data) {
+        setError(json.message ?? 'Failed to create subject');
+        return;
+      }
+      router.push(`/subjects/${json.data.id}`);
+    } catch {
+      setError('An unexpected error occurred');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <PageHeader title="New Subject" description="Enroll a subject in an active study" />
+
+      {error && (
+        <div className="mb-4">
+          <AlertBanner variant="error" message={error} onDismiss={() => setError(null)} />
+        </div>
+      )}
+
+      <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-6">
+        <div className="grid grid-cols-2 gap-4">
+          <Select
+            label="Study"
+            value={form.study_id}
+            onChange={(e) => setForm((f) => ({ ...f, study_id: e.target.value }))}
+            placeholder="Select a study"
+            options={studies.map((s) => ({ value: s.id, label: s.study_name }))}
+            required
+          />
+          <Select
+            label="Site"
+            value={form.site_id}
+            onChange={(e) => setForm((f) => ({ ...f, site_id: e.target.value }))}
+            placeholder="Select a site"
+            options={sites.map((s) => ({ value: s.id, label: s.name }))}
+            required
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Subject number"
+            value={form.subject_number}
+            onChange={(e) => setForm((f) => ({ ...f, subject_number: e.target.value }))}
+            required
+            placeholder="001-001"
+          />
+          <Input
+            label="Initials"
+            value={form.initials}
+            onChange={(e) => setForm((f) => ({ ...f, initials: e.target.value }))}
+            placeholder="J.D."
+          />
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <Input
+            label="Screening date"
+            type="date"
+            value={form.screening_date}
+            onChange={(e) => setForm((f) => ({ ...f, screening_date: e.target.value }))}
+          />
+          <Input
+            label="Baseline date"
+            type="date"
+            value={form.baseline_date}
+            onChange={(e) => setForm((f) => ({ ...f, baseline_date: e.target.value }))}
+            hint="Sets the anchor date for the auto-generated visit schedule"
+          />
+          <Input
+            label="Randomization date"
+            type="date"
+            value={form.randomization_date}
+            onChange={(e) => setForm((f) => ({ ...f, randomization_date: e.target.value }))}
+          />
+        </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="outline" onClick={() => router.push('/subjects')}>
+            Cancel
+          </Button>
+          <Button loading={saving} disabled={saving} onClick={() => void handleSave()}>
+            Create Subject
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
