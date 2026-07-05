@@ -47,8 +47,8 @@ export default function UsersSettingsPage() {
     try {
       const res = await fetch('/api/users');
       if (!res.ok) throw new Error('Failed to load users');
-      const json = (await res.json()) as { data: { users: Profile[] } };
-      setUsers(json.data.users);
+      const json = (await res.json()) as { data?: Profile[] | null };
+      setUsers(Array.isArray(json.data) ? json.data : []);
     } catch {
       setError('Failed to load users. Please refresh.');
     } finally {
