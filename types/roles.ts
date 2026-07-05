@@ -40,6 +40,8 @@ export type PermissionKey =
   | 'view_dashboard'
   | 'create_study'
   | 'edit_study'
+  | 'view_studies'
+  | 'manage_studies'
   | 'create_subject'
   | 'edit_subject'
   | 'view_subjects'
@@ -53,6 +55,5 @@ export type PermissionKey =
   | 'manage_users'
   | 'view_audit_logs'
   | 'manage_sites'
-  | 'manage_studies'
   | 'manage_settings'
   | 'view_analytics';

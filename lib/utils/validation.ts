@@ -124,6 +124,66 @@ export const getNotificationsSchema = z.object({
     .default('50'),
 });
 
+// ── Studies ───────────────────────────────────────────────────────────────────
+
+export const createStudySchema = z.object({
+  study_name: z.string().min(1, 'Study name is required').max(300).trim(),
+  protocol_number: z.string().max(100).trim().optional(),
+  sponsor: z.string().max(200).trim().optional(),
+  cro: z.string().max(200).trim().optional(),
+  phase: z.string().max(50).trim().optional(),
+  therapeutic_area: z.string().max(200).trim().optional(),
+  start_date: z.string().date().optional(),
+  end_date: z.string().date().optional(),
+});
+
+export type CreateStudySchema = z.infer<typeof createStudySchema>;
+
+export const updateStudySchema = z.object({
+  study_name: z.string().min(1).max(300).trim().optional(),
+  protocol_number: z.string().max(100).trim().optional(),
+  sponsor: z.string().max(200).trim().optional(),
+  cro: z.string().max(200).trim().optional(),
+  phase: z.string().max(50).trim().optional(),
+  therapeutic_area: z.string().max(200).trim().optional(),
+  start_date: z.string().date().optional(),
+  end_date: z.string().date().optional(),
+  status: z.enum(['draft', 'active', 'on_hold', 'closed', 'archived']).optional(),
+});
+
+export type UpdateStudySchema = z.infer<typeof updateStudySchema>;
+
+export const assignSitesSchema = z.object({
+  site_ids: z.array(z.string().uuid('Invalid site ID')).min(1, 'At least one site is required'),
+});
+
+export type AssignSitesSchema = z.infer<typeof assignSitesSchema>;
+
+export const approveAiExtractionSchema = z.object({
+  extraction_id: z.string().uuid('Invalid extraction ID'),
+});
+
+export type ApproveAiExtractionSchema = z.infer<typeof approveAiExtractionSchema>;
+
+// ── Visit Templates ───────────────────────────────────────────────────────────
+
+export const visitTemplateItemSchema = z.object({
+  visit_name: z.string().min(1, 'Visit name is required').max(200).trim(),
+  visit_order: z.number().int().min(0),
+  offset_days: z.number().int().optional(),
+  window_before: z.number().int().min(0).optional(),
+  window_after: z.number().int().min(0).optional(),
+  visit_type: z.enum(['scheduled', 'unscheduled']).optional(),
+  is_required: z.boolean().optional(),
+  notes: z.string().max(1000).trim().optional(),
+});
+
+export const createVisitTemplateSchema = z.object({
+  items: z.array(visitTemplateItemSchema).min(1, 'At least one visit is required'),
+});
+
+export type CreateVisitTemplateSchema = z.infer<typeof createVisitTemplateSchema>;
+
 // ── Invitations list filter ───────────────────────────────────────────────────
 
 export const listInvitationsSchema = z.object({

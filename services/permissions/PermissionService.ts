@@ -55,6 +55,13 @@ export const PermissionService = {
     }
   },
 
+  async requireAnyPermission(userId: string, permissionKeys: PermissionKey[]): Promise<void> {
+    for (const key of permissionKeys) {
+      if (await this.hasPermission(userId, key)) return;
+    }
+    throw new PermissionDeniedError(permissionKeys.join(' or '));
+  },
+
   async canAccessSite(userId: string, siteId: string): Promise<boolean> {
     const supabase = await createServerSupabaseClient();
 

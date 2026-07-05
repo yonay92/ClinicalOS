@@ -6,6 +6,16 @@ import { NotFoundError, DatabaseError } from '@/lib/api/errors';
 import type { Company, CompanySettings, CompanyModule } from '@/types/users';
 import type { RequestContext } from '@/types/api';
 
+const DEFAULT_DOCUMENT_TYPES = [
+  { name: 'Protocol', category: 'study', required_by_default: true },
+  { name: 'ICF', category: 'study', required_by_default: true },
+  { name: 'Investigator Brochure', category: 'study', required_by_default: true },
+  { name: 'Schedule of Assessments', category: 'study', required_by_default: true },
+  { name: 'Pharmacy Manual', category: 'study', required_by_default: false },
+  { name: 'Laboratory Manual', category: 'study', required_by_default: false },
+  { name: 'Other', category: 'study', required_by_default: false },
+];
+
 const DEFAULT_MODULES = [
   'dashboard',
   'task_center',
@@ -252,6 +262,17 @@ export const CompanyService = {
         ignoreDuplicates: true,
       });
     }
+
+    // Seed default document types (supabase/seed/004_document_types.sql)
+    await supabase.from('document_types').upsert(
+      DEFAULT_DOCUMENT_TYPES.map((d) => ({
+        company_id: companyId,
+        name: d.name,
+        category: d.category,
+        required_by_default: d.required_by_default,
+      })),
+      { onConflict: 'company_id,name', ignoreDuplicates: true },
+    );
 
     void companyName;
   },

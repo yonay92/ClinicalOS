@@ -1,0 +1,19 @@
+-- Seed: 004_document_types.sql
+-- Description: Default document types seeded per-company at provisioning time.
+-- These are inserted per-company by CompanyService.provision() — not globally,
+-- since `document_types` is company-scoped (companies may add custom types in Sprint 6).
+--
+-- INSERT pattern used by CompanyService.provision(company_id uuid):
+--
+-- INSERT INTO document_types (company_id, name, category, required_by_default) VALUES
+--   (company_id, 'Protocol',                 'study', true),
+--   (company_id, 'ICF',                      'study', true),
+--   (company_id, 'Investigator Brochure',    'study', true),
+--   (company_id, 'Schedule of Assessments',  'study', true),
+--   (company_id, 'Pharmacy Manual',          'study', false),
+--   (company_id, 'Laboratory Manual',        'study', false),
+--   (company_id, 'Other',                    'study', false);
+--
+-- `required_by_default = true` rows are auto-populated into `study_document_requirements`
+-- by StudyService.activateStudy() (resolves GAP-BL-05). Sprint 6 (Regulatory) will extend
+-- this table with expiration/versioning columns and its own management UI.
