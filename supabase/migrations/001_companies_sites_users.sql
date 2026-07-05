@@ -2,6 +2,12 @@
 -- Description: Core SaaS foundation — companies, profiles, sites, invitations,
 --              notifications, and audit tables with RLS helpers
 -- Rollback: see ROLLBACK section at the bottom
+--
+-- ORDERING RULES (enforced below):
+--   1. Tables are created in FK-dependency order.
+--   2. Helper functions that reference a table come AFTER that table.
+--   3. RLS policies that reference another table come AFTER both tables
+--      and any helper functions they depend on.
 
 -- ============================================================
 -- SHARED TRIGGER FUNCTION
@@ -16,33 +22,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================
--- RLS HELPER: current_company_id
--- Returns the company_id of the currently authenticated user.
--- Used in all company-isolation RLS policies.
--- ============================================================
-
-CREATE OR REPLACE FUNCTION current_company_id()
-RETURNS uuid AS $$
-  SELECT company_id
-  FROM public.profiles
-  WHERE id = auth.uid()
-  LIMIT 1;
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
-
--- ============================================================
--- RLS HELPER: current_user_sites
--- Returns site IDs the current user is authorized to access.
--- ============================================================
-
-CREATE OR REPLACE FUNCTION current_user_sites()
-RETURNS SETOF uuid AS $$
-  SELECT site_id
-  FROM public.user_sites
-  WHERE user_id = auth.uid();
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
-
--- ============================================================
--- COMPANIES
+-- COMPANIES  (no FK deps on other public tables)
 -- ============================================================
 
 CREATE TABLE companies (
@@ -62,14 +42,10 @@ CREATE TRIGGER companies_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "companies_select" ON companies
-  FOR SELECT USING (
-    id = (SELECT company_id FROM profiles WHERE id = auth.uid())
-  );
+-- RLS policy added below, after profiles exists
 
 -- ============================================================
--- COMPANY SETTINGS
+-- COMPANY SETTINGS  (FK → companies)
 -- ============================================================
 
 CREATE TABLE company_settings (
@@ -93,16 +69,10 @@ CREATE TRIGGER company_settings_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 ALTER TABLE company_settings ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "company_settings_select" ON company_settings
-  FOR SELECT USING (company_id = current_company_id());
-
-CREATE POLICY "company_settings_update" ON company_settings
-  FOR UPDATE USING (company_id = current_company_id())
-  WITH CHECK (company_id = current_company_id());
+-- RLS policies added below, after current_company_id() exists
 
 -- ============================================================
--- COMPANY MODULES
+-- COMPANY MODULES  (FK → companies)
 -- ============================================================
 
 CREATE TABLE company_modules (
@@ -117,12 +87,10 @@ CREATE TABLE company_modules (
 CREATE INDEX idx_company_modules_company ON company_modules(company_id);
 
 ALTER TABLE company_modules ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "company_modules_select" ON company_modules
-  FOR SELECT USING (company_id = current_company_id());
+-- RLS policy added below, after current_company_id() exists
 
 -- ============================================================
--- PROFILES (mapped to auth.users)
+-- PROFILES  (FK → companies, auth.users)
 -- ============================================================
 
 CREATE TABLE profiles (
@@ -149,6 +117,41 @@ CREATE TRIGGER profiles_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+-- RLS policies added below, after current_company_id() exists
+
+-- ============================================================
+-- RLS HELPER: current_company_id
+-- Defined here because profiles now exists.
+-- Returns the company_id of the currently authenticated user.
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION current_company_id()
+RETURNS uuid AS $$
+  SELECT company_id
+  FROM public.profiles
+  WHERE id = auth.uid()
+  LIMIT 1;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- ============================================================
+-- RLS POLICIES: companies, company_settings, company_modules, profiles
+-- Added now that both profiles and current_company_id() exist.
+-- ============================================================
+
+CREATE POLICY "companies_select" ON companies
+  FOR SELECT USING (
+    id = (SELECT company_id FROM profiles WHERE id = auth.uid())
+  );
+
+CREATE POLICY "company_settings_select" ON company_settings
+  FOR SELECT USING (company_id = current_company_id());
+
+CREATE POLICY "company_settings_update" ON company_settings
+  FOR UPDATE USING (company_id = current_company_id())
+  WITH CHECK (company_id = current_company_id());
+
+CREATE POLICY "company_modules_select" ON company_modules
+  FOR SELECT USING (company_id = current_company_id());
 
 CREATE POLICY "profiles_select" ON profiles
   FOR SELECT USING (company_id = current_company_id());
@@ -161,7 +164,8 @@ CREATE POLICY "profiles_update_own" ON profiles
   );
 
 -- ============================================================
--- SITES
+-- SITES  (FK → companies)
+-- current_company_id() now exists so RLS policy can be added inline.
 -- ============================================================
 
 CREATE TABLE sites (
@@ -193,7 +197,7 @@ CREATE POLICY "sites_select" ON sites
   FOR SELECT USING (company_id = current_company_id());
 
 -- ============================================================
--- USER SITES
+-- USER SITES  (FK → companies, profiles, sites)
 -- ============================================================
 
 CREATE TABLE user_sites (
@@ -210,12 +214,31 @@ CREATE INDEX idx_user_sites_site    ON user_sites(site_id);
 CREATE INDEX idx_user_sites_company ON user_sites(company_id);
 
 ALTER TABLE user_sites ENABLE ROW LEVEL SECURITY;
+-- RLS policy added below, after current_user_sites() exists
+
+-- ============================================================
+-- RLS HELPER: current_user_sites
+-- Defined here because user_sites now exists.
+-- Returns site IDs the current user is authorized to access.
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION current_user_sites()
+RETURNS SETOF uuid AS $$
+  SELECT site_id
+  FROM public.user_sites
+  WHERE user_id = auth.uid();
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- ============================================================
+-- RLS POLICY: user_sites
+-- Added now that current_user_sites() exists.
+-- ============================================================
 
 CREATE POLICY "user_sites_select" ON user_sites
   FOR SELECT USING (company_id = current_company_id());
 
 -- ============================================================
--- USER INVITATIONS
+-- USER INVITATIONS  (FK → companies, profiles)
 -- ============================================================
 
 CREATE TABLE user_invitations (
@@ -248,11 +271,12 @@ CREATE TRIGGER user_invitations_updated_at
 
 ALTER TABLE user_invitations ENABLE ROW LEVEL SECURITY;
 
--- RLS policies that require has_permission() are added in migration 002
--- until then, RLS is enabled (blocking all non-service-role access) as the secure default
+-- Permission-gated RLS policies are added in migration 002
+-- (after has_permission() is defined). RLS is enabled here as
+-- the secure default — all access blocked until 002 runs.
 
 -- ============================================================
--- NOTIFICATIONS
+-- NOTIFICATIONS  (FK → companies, profiles)
 -- ============================================================
 
 CREATE TABLE notifications (
@@ -298,7 +322,7 @@ CREATE POLICY "notifications_update" ON notifications
 -- INSERT only via service role — no authenticated INSERT policy
 
 -- ============================================================
--- NOTIFICATION PREFERENCES
+-- NOTIFICATION PREFERENCES  (FK → companies, profiles)
 -- ============================================================
 
 CREATE TABLE notification_preferences (
@@ -332,7 +356,7 @@ CREATE POLICY "notification_prefs_all" ON notification_preferences
   );
 
 -- ============================================================
--- NOTIFICATION EMAIL QUEUE
+-- NOTIFICATION EMAIL QUEUE  (FK → companies, profiles, notifications)
 -- ============================================================
 
 CREATE TABLE notification_email_queue (
@@ -359,7 +383,7 @@ ALTER TABLE notification_email_queue ENABLE ROW LEVEL SECURITY;
 -- Email queue is accessed only by the Edge Function via service role — no user policies
 
 -- ============================================================
--- AUDIT LOGS (immutable)
+-- AUDIT LOGS  (FK → companies, sites, profiles)
 -- ============================================================
 
 CREATE TABLE audit_logs (
