@@ -37,16 +37,19 @@ function emptyItem(order: number): DraftItem {
     window_after: 0,
     visit_type: 'scheduled',
     is_required: true,
+    is_baseline: false,
   };
 }
 
 function SortableRow({
   item,
   onChange,
+  onSetBaseline,
   onRemove,
 }: {
   item: DraftItem;
   onChange: (key: string, patch: Partial<DraftItem>) => void;
+  onSetBaseline: (key: string) => void;
   onRemove: (key: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -113,6 +116,15 @@ function SortableRow({
         />
         Required
       </label>
+      <label className="flex items-center gap-1 text-xs text-gray-600">
+        <input
+          type="radio"
+          name="visit-template-baseline"
+          checked={item.is_baseline ?? false}
+          onChange={() => onSetBaseline(item.key)}
+        />
+        Baseline
+      </label>
       <Button variant="ghost" size="sm" onClick={() => onRemove(item.key)}>
         Remove
       </Button>
@@ -135,6 +147,10 @@ export function VisitTemplateBuilder({
 
   function handleChange(key: string, patch: Partial<DraftItem>) {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
+  }
+
+  function handleSetBaseline(key: string) {
+    setItems((prev) => prev.map((i) => ({ ...i, is_baseline: i.key === key })));
   }
 
   function handleRemove(key: string) {
@@ -160,6 +176,10 @@ export function VisitTemplateBuilder({
   async function handleSave() {
     if (items.some((i) => !i.visit_name.trim())) {
       setError('Every visit needs a name');
+      return;
+    }
+    if (items.filter((i) => i.is_baseline).length !== 1) {
+      setError('Mark exactly one visit as Baseline');
       return;
     }
     setSaving(true);
@@ -194,7 +214,13 @@ export function VisitTemplateBuilder({
         <SortableContext items={items.map((i) => i.key)} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
             {items.map((item) => (
-              <SortableRow key={item.key} item={item} onChange={handleChange} onRemove={handleRemove} />
+              <SortableRow
+                key={item.key}
+                item={item}
+                onChange={handleChange}
+                onSetBaseline={handleSetBaseline}
+                onRemove={handleRemove}
+              />
             ))}
           </div>
         </SortableContext>

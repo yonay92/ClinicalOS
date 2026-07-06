@@ -22,7 +22,7 @@ export function SubjectVisitsList({ visits }: { visits: Visit[] }) {
     return (
       <EmptyState
         title="No visits scheduled"
-        description="Visits are generated automatically once the subject has a baseline date and the study has an approved visit template"
+        description="The Baseline visit is scheduled once the subject is created; completing it generates the rest of the protocol schedule"
       />
     );
   }

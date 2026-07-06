@@ -2,15 +2,19 @@
 
 ## Visit Generation
 
-Trigger:
-Subject created.
+The Baseline visit and the rest of the protocol schedule are generated in two steps:
 
-Actions:
+**At Subject creation:**
 
-- Read approved Visit Template.
-- Generate all scheduled visits.
-- Calculate target dates.
-- Calculate visit windows.
+- Read the approved Visit Template's designated Baseline item (`is_baseline`).
+- Create a placeholder Baseline visit (status Scheduled, no date yet).
+
+**At Baseline visit completion (trigger: Baseline Date entered):**
+
+- Mark the Baseline visit Completed with the entered date.
+- Read the approved Visit Template's remaining items.
+- Generate all other scheduled visits.
+- Calculate target dates and visit windows, anchored to Baseline Date.
 - Create calendar events.
 
 ## Unscheduled Visits

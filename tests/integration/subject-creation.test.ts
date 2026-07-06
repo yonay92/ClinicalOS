@@ -154,12 +154,29 @@ describe('Approved visit template gate blocks subject creation (GAP-REQ-03)', ()
       status: 'pre_screening',
       baseline_date: null,
     };
+    const template = { id: 'template-uuid' };
+    const baselineItem = {
+      id: 'item-baseline-uuid',
+      template_id: 'template-uuid',
+      visit_name: 'Baseline',
+      visit_order: 1,
+      offset_days: 0,
+      window_before: 0,
+      window_after: 0,
+      visit_type: 'scheduled',
+      is_required: true,
+      is_baseline: true,
+    };
 
     const client = makeSupabaseClient(
       { data: activeStudy },
       { data: studySite },
       { data: subjectRow },
-      { data: null },
+      { data: null }, // subject_timeline insert (subject_created)
+      { data: template }, // visit_templates lookup (baseline placeholder)
+      { data: baselineItem }, // visit_template_items lookup (is_baseline = true)
+      { data: null }, // visits insert (Baseline placeholder)
+      { data: null }, // subject_timeline insert (baseline_visit_scheduled)
     );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
 

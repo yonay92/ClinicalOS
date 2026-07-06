@@ -130,6 +130,10 @@ export default function SubjectProfilePage({ params }: { params: Promise<{ id: s
                 <dd className="text-gray-900">{subject.baseline_date ?? '—'}</dd>
               </div>
               <div className="flex justify-between">
+                <dt className="text-gray-500">Randomization number</dt>
+                <dd className="text-gray-900">{subject.randomization_number ?? '—'}</dd>
+              </div>
+              <div className="flex justify-between">
                 <dt className="text-gray-500">Randomization date</dt>
                 <dd className="text-gray-900">{subject.randomization_date ?? '—'}</dd>
               </div>
@@ -142,11 +146,9 @@ export default function SubjectProfilePage({ params }: { params: Promise<{ id: s
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <h3 className="mb-2 text-sm font-semibold text-gray-900">Visit Schedule</h3>
             <p className="text-sm text-gray-500">
-              {visits.length > 0
+              {subject.baseline_date
                 ? `${visits.length} visit(s) generated from the approved visit template.`
-                : subject.baseline_date
-                  ? 'No visits generated yet.'
-                  : 'Set a baseline date to generate the visit schedule.'}
+                : 'Baseline visit scheduled — complete it to generate the rest of the protocol schedule.'}
             </p>
           </div>
         </div>

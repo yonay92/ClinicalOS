@@ -46,13 +46,7 @@ export type StudySite = {
 };
 
 export type StudyStaffRole =
-  | 'pi'
-  | 'sub_i'
-  | 'crc'
-  | 'data_entry'
-  | 'regulatory'
-  | 'site_director'
-  | 'other';
+  'pi' | 'sub_i' | 'crc' | 'data_entry' | 'regulatory' | 'site_director' | 'other';
 
 export type StudyStaff = {
   id: string;
@@ -96,6 +90,7 @@ export type VisitTemplateItem = {
   window_after: number;
   visit_type: VisitType;
   is_required: boolean;
+  is_baseline: boolean;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -109,6 +104,7 @@ export type CreateVisitTemplateItemInput = {
   window_after?: number | undefined;
   visit_type?: VisitType | undefined;
   is_required?: boolean | undefined;
+  is_baseline?: boolean | undefined;
   notes?: string | undefined;
 };
 

@@ -14,7 +14,7 @@ import type { RequestContext } from '@/types/api';
 const TEMPLATE_COLUMNS =
   'id, company_id, study_id, version, source, status, approved_by, approved_at, created_by, created_at, updated_at';
 const ITEM_COLUMNS =
-  'id, company_id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, notes, created_at, updated_at';
+  'id, company_id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, is_baseline, notes, created_at, updated_at';
 
 export const VisitTemplateService = {
   async listByStudy(studyId: string, ctx: RequestContext): Promise<VisitTemplateWithItems[]> {
@@ -95,6 +95,11 @@ export const VisitTemplateService = {
   ): Promise<VisitTemplateWithItems> {
     await PermissionService.requireAnyPermission(ctx.user.id, ['edit_study', 'manage_studies']);
 
+    const baselineCount = items.filter((item) => item.is_baseline).length;
+    if (baselineCount !== 1) {
+      throw new BusinessRuleError('Exactly one visit must be marked as Baseline');
+    }
+
     const supabase = await createServerSupabaseClient();
 
     const { data: existing } = await supabase
@@ -140,6 +145,7 @@ export const VisitTemplateService = {
           window_after: item.window_after ?? 0,
           visit_type: item.visit_type ?? 'scheduled',
           is_required: item.is_required ?? true,
+          is_baseline: item.is_baseline ?? false,
           notes: item.notes ?? null,
         })),
       )

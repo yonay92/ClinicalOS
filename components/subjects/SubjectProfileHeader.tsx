@@ -2,6 +2,8 @@
 
 import { Badge } from '@/components/ui/Badge';
 import { SubjectStatusChanger } from '@/components/subjects/SubjectStatusChanger';
+import { SubjectBaselineCompleter } from '@/components/subjects/SubjectBaselineCompleter';
+import { SubjectRandomizer } from '@/components/subjects/SubjectRandomizer';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { Subject, SubjectStatus, Visit } from '@/types/subjects';
 
@@ -49,12 +51,18 @@ export function SubjectProfileHeader({
           </p>
           <p className="mt-1 text-sm text-gray-500">
             Next visit:{' '}
-            {nextVisit ? `${nextVisit.visit_name} — ${nextVisit.target_date ?? 'unscheduled'}` : '—'}
+            {nextVisit
+              ? `${nextVisit.visit_name} — ${nextVisit.target_date ?? 'unscheduled'}`
+              : '—'}
           </p>
         </div>
 
         {hasPermission('edit_subject') && (
-          <SubjectStatusChanger subject={subject} onChanged={onChanged} />
+          <div className="flex items-center gap-2">
+            <SubjectBaselineCompleter subject={subject} onChanged={onChanged} />
+            <SubjectRandomizer subject={subject} onChanged={onChanged} />
+            <SubjectStatusChanger subject={subject} onChanged={onChanged} />
+          </div>
         )}
       </div>
     </div>

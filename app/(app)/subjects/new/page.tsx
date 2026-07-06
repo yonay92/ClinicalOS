@@ -17,8 +17,6 @@ type SubjectForm = {
   subject_number: string;
   initials: string;
   screening_date: string;
-  baseline_date: string;
-  randomization_date: string;
 };
 
 const EMPTY_FORM: SubjectForm = {
@@ -27,8 +25,6 @@ const EMPTY_FORM: SubjectForm = {
   subject_number: '',
   initials: '',
   screening_date: '',
-  baseline_date: '',
-  randomization_date: '',
 };
 
 export default function NewSubjectPage() {
@@ -36,6 +32,7 @@ export default function NewSubjectPage() {
   const [form, setForm] = useState<SubjectForm>(EMPTY_FORM);
   const [studies, setStudies] = useState<Study[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [sitesLoaded, setSitesLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +43,16 @@ export default function NewSubjectPage() {
         fetch('/api/sites'),
       ]);
       if (studiesRes.ok) setStudies(((await studiesRes.json()) as { data: Study[] }).data);
-      if (sitesRes.ok) setSites(((await sitesRes.json()) as { data: Site[] }).data);
+      if (sitesRes.ok) {
+        const fetchedSites = ((await sitesRes.json()) as { data: Site[] }).data;
+        setSites(fetchedSites);
+        // Typical single-site CRC workflow: skip the picker and auto-assign the
+        // subject to the only site the user can access.
+        if (fetchedSites.length === 1) {
+          setForm((f) => ({ ...f, site_id: fetchedSites[0]?.id ?? '' }));
+        }
+      }
+      setSitesLoaded(true);
     })();
   }, []);
 
@@ -91,6 +97,9 @@ export default function NewSubjectPage() {
     }
   }
 
+  const singleSite = sites.length === 1 ? sites[0] : null;
+  const noSiteAccess = sitesLoaded && sites.length === 0;
+
   return (
     <div className="max-w-2xl">
       <PageHeader title="New Subject" description="Enroll a subject in an active study" />
@@ -98,6 +107,15 @@ export default function NewSubjectPage() {
       {error && (
         <div className="mb-4">
           <AlertBanner variant="error" message={error} onDismiss={() => setError(null)} />
+        </div>
+      )}
+
+      {noSiteAccess && (
+        <div className="mb-4">
+          <AlertBanner
+            variant="error"
+            message="You don't have access to any site — contact your administrator."
+          />
         </div>
       )}
 
@@ -111,14 +129,23 @@ export default function NewSubjectPage() {
             options={studies.map((s) => ({ value: s.id, label: s.study_name }))}
             required
           />
-          <Select
-            label="Site"
-            value={form.site_id}
-            onChange={(e) => setForm((f) => ({ ...f, site_id: e.target.value }))}
-            placeholder="Select a site"
-            options={sites.map((s) => ({ value: s.id, label: s.name }))}
-            required
-          />
+          {singleSite ? (
+            <div className="space-y-1">
+              <span className="block text-sm font-medium text-slate-700">Site</span>
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900">
+                {singleSite.name}
+              </p>
+            </div>
+          ) : (
+            <Select
+              label="Site"
+              value={form.site_id}
+              onChange={(e) => setForm((f) => ({ ...f, site_id: e.target.value }))}
+              placeholder="Select a site"
+              options={sites.map((s) => ({ value: s.id, label: s.name }))}
+              required
+            />
+          )}
         </div>
         <div className="grid grid-cols-2 gap-4">
           <Input
@@ -135,32 +162,23 @@ export default function NewSubjectPage() {
             placeholder="J.D."
           />
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <Input
             label="Screening date"
             type="date"
             value={form.screening_date}
             onChange={(e) => setForm((f) => ({ ...f, screening_date: e.target.value }))}
           />
-          <Input
-            label="Baseline date"
-            type="date"
-            value={form.baseline_date}
-            onChange={(e) => setForm((f) => ({ ...f, baseline_date: e.target.value }))}
-            hint="Sets the anchor date for the auto-generated visit schedule"
-          />
-          <Input
-            label="Randomization date"
-            type="date"
-            value={form.randomization_date}
-            onChange={(e) => setForm((f) => ({ ...f, randomization_date: e.target.value }))}
-          />
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="outline" onClick={() => router.push('/subjects')}>
             Cancel
           </Button>
-          <Button loading={saving} disabled={saving} onClick={() => void handleSave()}>
+          <Button
+            loading={saving}
+            disabled={saving || noSiteAccess}
+            onClick={() => void handleSave()}
+          >
             Create Subject
           </Button>
         </div>

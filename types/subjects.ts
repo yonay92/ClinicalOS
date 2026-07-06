@@ -19,6 +19,7 @@ export type Subject = {
   screening_date: string | null;
   baseline_date: string | null;
   randomization_date: string | null;
+  randomization_number: string | null;
   end_of_study_date: string | null;
   created_by: string | null;
   created_at: string;
@@ -31,14 +32,21 @@ export type CreateSubjectInput = {
   subject_number: string;
   initials?: string;
   screening_date?: string;
-  baseline_date?: string;
-  randomization_date?: string;
 };
 
 export type UpdateSubjectInput = Partial<
-  Pick<CreateSubjectInput, 'initials' | 'screening_date' | 'baseline_date' | 'randomization_date'>
+  Pick<CreateSubjectInput, 'initials' | 'screening_date'>
 > & {
   end_of_study_date?: string;
+};
+
+export type CompleteBaselineVisitInput = {
+  baseline_date: string;
+};
+
+export type RandomizeSubjectInput = {
+  randomization_number: string;
+  randomization_date: string;
 };
 
 export type SubjectStatusHistory = {

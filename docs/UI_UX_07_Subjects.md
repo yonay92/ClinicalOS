@@ -27,6 +27,8 @@ Shows Study, Site, Status and next scheduled visit.
 
 ## Actions
 
+- Complete Baseline Visit (hidden once the Baseline Date is recorded)
+- Randomize (available only in Screening status, hidden once randomized)
 - Change Status
 - Add Note
 - Create Unscheduled Visit

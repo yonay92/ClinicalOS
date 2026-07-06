@@ -159,9 +159,16 @@ visit_template_items
 - window_after integer default 0
 - visit_type text default 'scheduled'
 - is_required boolean default true
+- is_baseline boolean default false
 - notes text
 - created_at timestamptz default now()
 ```
+
+### Rule
+
+Exactly one item per template must have `is_baseline = true`. This is the visit a
+Subject's Baseline Date anchors to and the one scheduled as a placeholder at Subject
+creation (see `DATABASE_Part_03` §12).
 
 ### Example
 

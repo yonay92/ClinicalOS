@@ -14,6 +14,8 @@ import type {
   SubjectStatus,
   CreateSubjectInput,
   UpdateSubjectInput,
+  CompleteBaselineVisitInput,
+  RandomizeSubjectInput,
   SubjectStatusHistory,
   SubjectNote,
   SubjectNoteVisibility,
@@ -25,7 +27,7 @@ import type { VisitTemplateItem } from '@/types/studies';
 import type { RequestContext } from '@/types/api';
 
 const SUBJECT_COLUMNS =
-  'id, company_id, site_id, study_id, subject_number, initials, status, screening_date, baseline_date, randomization_date, end_of_study_date, created_by, created_at, updated_at';
+  'id, company_id, site_id, study_id, subject_number, initials, status, screening_date, baseline_date, randomization_date, randomization_number, end_of_study_date, created_by, created_at, updated_at';
 const VISIT_COLUMNS =
   'id, company_id, site_id, study_id, subject_id, visit_template_item_id, visit_name, visit_type, target_date, scheduled_date, window_start, window_end, status, created_by, created_at, updated_at';
 const STATUS_HISTORY_COLUMNS =
@@ -93,7 +95,8 @@ export const SubjectService = {
     if (filters.study_id) query = query.eq('study_id', filters.study_id);
     if (filters.site_id) query = query.eq('site_id', filters.site_id);
     if (filters.status) query = query.eq('status', filters.status);
-    if (filters.subject_number) query = query.ilike('subject_number', `%${filters.subject_number}%`);
+    if (filters.subject_number)
+      query = query.ilike('subject_number', `%${filters.subject_number}%`);
 
     const { data } = await query.order('created_at', { ascending: false });
     return (data as Subject[]) ?? [];
@@ -165,8 +168,6 @@ export const SubjectService = {
         initials: input.initials ?? null,
         status: 'pre_screening',
         screening_date: input.screening_date ?? null,
-        baseline_date: input.baseline_date ?? null,
-        randomization_date: input.randomization_date ?? null,
         created_by: ctx.user.id,
       })
       .select(SUBJECT_COLUMNS)
@@ -192,8 +193,60 @@ export const SubjectService = {
 
     // BUSINESS_RULES_03 "Create Calendar Events" is deferred — calendar_events ships
     // in Sprint 4 (Visits & Calendar) alongside the full visit lifecycle.
-    if (subject.baseline_date) {
-      await this.generateVisitSchedule(subject, ctx);
+    //
+    // Baseline is no longer collected at creation — instead, a placeholder visit is
+    // scheduled for the template's designated Baseline item now, and completing it
+    // (SubjectService.completeBaselineVisit) records baseline_date and generates the
+    // rest of the protocol schedule anchored to that date.
+    const { data: template } = await supabase
+      .from('visit_templates')
+      .select('id')
+      .eq('study_id', subject.study_id)
+      .eq('company_id', ctx.company.id)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    if (template) {
+      const { data: baselineItem } = await supabase
+        .from('visit_template_items')
+        .select(
+          'id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, is_baseline, notes, created_at, updated_at',
+        )
+        .eq('template_id', (template as { id: string }).id)
+        .eq('is_baseline', true)
+        .maybeSingle();
+
+      if (!baselineItem) {
+        throw new BusinessRuleError(
+          "This study's approved visit template has no Baseline visit configured",
+        );
+      }
+
+      const item = baselineItem as VisitTemplateItem;
+      const { error: visitError } = await supabase.from('visits').insert({
+        company_id: ctx.company.id,
+        site_id: subject.site_id,
+        study_id: subject.study_id,
+        subject_id: subject.id,
+        visit_template_item_id: item.id,
+        visit_name: item.visit_name,
+        visit_type: item.visit_type,
+        target_date: null,
+        window_start: null,
+        window_end: null,
+        status: 'scheduled',
+        created_by: ctx.user.id,
+      });
+      if (visitError) throw new DatabaseError(visitError.message);
+
+      await this.addTimelineEvent(
+        subject.id,
+        ctx.company.id,
+        'baseline_visit_scheduled',
+        new Date().toISOString(),
+        `${item.visit_name} visit scheduled — pending completion`,
+        ctx.user.id,
+      );
     }
 
     await AuditService.log({
@@ -244,13 +297,6 @@ export const SubjectService = {
       new_value: input as Record<string, unknown>,
     });
 
-    // Visit offsets anchor to baseline_date (GAP_ANALYSIS §227). If it was just set
-    // for the first time, generate the schedule now. Recalculating an already-generated
-    // schedule when baseline_date changes again is Sprint 4 scope.
-    if (!subject.baseline_date && result.baseline_date) {
-      await this.generateVisitSchedule(result, ctx);
-    }
-
     return result;
   },
 
@@ -272,12 +318,16 @@ export const SubjectService = {
     const { data: items } = await supabase
       .from('visit_template_items')
       .select(
-        'id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, notes, created_at, updated_at',
+        'id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, is_baseline, notes, created_at, updated_at',
       )
       .eq('template_id', (template as { id: string }).id)
       .order('visit_order');
 
-    const templateItems = (items as VisitTemplateItem[]) ?? [];
+    // The Baseline item's visit already exists (created as a placeholder at subject
+    // creation, then completed via completeBaselineVisit) — never re-generate it here.
+    const templateItems = ((items as VisitTemplateItem[]) ?? []).filter(
+      (item) => !item.is_baseline,
+    );
     if (templateItems.length === 0) return [];
 
     const rows = templateItems.map((item) => {
@@ -298,7 +348,10 @@ export const SubjectService = {
       };
     });
 
-    const { data: inserted, error } = await supabase.from('visits').insert(rows).select(VISIT_COLUMNS);
+    const { data: inserted, error } = await supabase
+      .from('visits')
+      .insert(rows)
+      .select(VISIT_COLUMNS);
     if (error) throw new DatabaseError(error.message);
 
     await this.addTimelineEvent(
@@ -311,6 +364,199 @@ export const SubjectService = {
     );
 
     return (inserted as Visit[]) ?? [];
+  },
+
+  async completeBaselineVisit(
+    subjectId: string,
+    input: CompleteBaselineVisitInput,
+    ctx: RequestContext,
+  ): Promise<Subject> {
+    await PermissionService.requirePermission(ctx.user.id, 'edit_subject');
+
+    const subject = await this.getById(subjectId, ctx);
+
+    if (subject.baseline_date) {
+      throw new BusinessRuleError('Baseline visit has already been completed for this subject');
+    }
+
+    const supabase = await createServerSupabaseClient();
+
+    const { data: template } = await supabase
+      .from('visit_templates')
+      .select('id')
+      .eq('study_id', subject.study_id)
+      .eq('company_id', ctx.company.id)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    const { data: baselineItem } = template
+      ? await supabase
+          .from('visit_template_items')
+          .select(
+            'id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, is_baseline, notes, created_at, updated_at',
+          )
+          .eq('template_id', (template as { id: string }).id)
+          .eq('is_baseline', true)
+          .maybeSingle()
+      : { data: null };
+
+    if (!baselineItem) {
+      throw new BusinessRuleError(
+        'This study’s approved visit template has no Baseline visit configured',
+      );
+    }
+
+    const item = baselineItem as VisitTemplateItem;
+
+    const { data: baselineVisit } = await supabase
+      .from('visits')
+      .select('id')
+      .eq('subject_id', subjectId)
+      .eq('company_id', ctx.company.id)
+      .eq('visit_template_item_id', item.id)
+      .maybeSingle();
+
+    if (!baselineVisit) {
+      throw new NotFoundError('Baseline visit');
+    }
+
+    const { error: visitError } = await supabase
+      .from('visits')
+      .update({
+        status: 'completed',
+        scheduled_date: input.baseline_date,
+        target_date: input.baseline_date,
+        window_start: addDaysToDateString(input.baseline_date, -item.window_before),
+        window_end: addDaysToDateString(input.baseline_date, item.window_after),
+      })
+      .eq('id', (baselineVisit as { id: string }).id)
+      .eq('company_id', ctx.company.id);
+
+    if (visitError) throw new DatabaseError(visitError.message);
+
+    const { data: updated, error } = await supabase
+      .from('subjects')
+      .update({ baseline_date: input.baseline_date })
+      .eq('id', subjectId)
+      .eq('company_id', ctx.company.id)
+      .select(SUBJECT_COLUMNS)
+      .single();
+
+    if (error || !updated) {
+      throw new DatabaseError(error?.message ?? 'Failed to record baseline date');
+    }
+
+    const result = updated as Subject;
+
+    await this.addTimelineEvent(
+      subjectId,
+      ctx.company.id,
+      'baseline_visit_completed',
+      new Date().toISOString(),
+      `${item.visit_name} visit completed on ${input.baseline_date}`,
+      ctx.user.id,
+    );
+
+    await this.generateVisitSchedule(result, ctx);
+
+    await AuditService.log({
+      company_id: ctx.company.id,
+      site_id: subject.site_id,
+      user_id: ctx.user.id,
+      action: 'subject.baseline_completed',
+      module: 'subjects',
+      record_type: 'subjects',
+      record_id: subjectId,
+      new_value: { baseline_date: input.baseline_date },
+    });
+
+    return result;
+  },
+
+  async randomize(
+    subjectId: string,
+    input: RandomizeSubjectInput,
+    ctx: RequestContext,
+  ): Promise<Subject> {
+    await PermissionService.requirePermission(ctx.user.id, 'edit_subject');
+
+    const subject = await this.getById(subjectId, ctx);
+
+    if (subject.randomization_date) {
+      throw new BusinessRuleError('Subject has already been randomized');
+    }
+
+    if (!isValidStatusTransition(subject.status, 'randomized')) {
+      throw new BusinessRuleError(`Cannot randomize a subject with status "${subject.status}"`);
+    }
+
+    const supabase = await createServerSupabaseClient();
+    const { data: updated, error } = await supabase
+      .from('subjects')
+      .update({
+        randomization_number: input.randomization_number,
+        randomization_date: input.randomization_date,
+        status: 'randomized',
+      })
+      .eq('id', subjectId)
+      .eq('company_id', ctx.company.id)
+      .select(SUBJECT_COLUMNS)
+      .single();
+
+    if (error || !updated) {
+      throw new DatabaseError(error?.message ?? 'Failed to randomize subject');
+    }
+
+    const result = updated as Subject;
+
+    await supabase.from('subject_status_history').insert({
+      company_id: ctx.company.id,
+      subject_id: subjectId,
+      old_status: subject.status,
+      new_status: 'randomized',
+      changed_by: ctx.user.id,
+      reason: `Randomization #${input.randomization_number}`,
+    });
+
+    await this.addTimelineEvent(
+      subjectId,
+      ctx.company.id,
+      'randomized',
+      new Date().toISOString(),
+      `Subject randomized (Randomization #${input.randomization_number})`,
+      ctx.user.id,
+    );
+
+    await AuditService.log({
+      company_id: ctx.company.id,
+      site_id: subject.site_id,
+      user_id: ctx.user.id,
+      action: 'subject.randomized',
+      module: 'subjects',
+      record_type: 'subjects',
+      record_id: subjectId,
+      old_value: { status: subject.status },
+      new_value: {
+        status: 'randomized',
+        randomization_number: input.randomization_number,
+        randomization_date: input.randomization_date,
+      },
+    });
+
+    for (const recipientRole of ['pi', 'crc']) {
+      await NotificationService.dispatch({
+        type: 'subject_status_changed',
+        companyId: ctx.company.id,
+        siteId: subject.site_id,
+        recipientRole,
+        relatedModule: 'subjects',
+        relatedRecordId: subjectId,
+        relatedRecordType: 'subjects',
+        context: { subject_number: subject.subject_number, new_status: 'randomized' },
+      });
+    }
+
+    return result;
   },
 
   async updateStatus(

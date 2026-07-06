@@ -175,6 +175,7 @@ export const visitTemplateItemSchema = z.object({
   window_after: z.number().int().min(0).optional(),
   visit_type: z.enum(['scheduled', 'unscheduled']).optional(),
   is_required: z.boolean().optional(),
+  is_baseline: z.boolean().optional(),
   notes: z.string().max(1000).trim().optional(),
 });
 
@@ -192,8 +193,6 @@ export const createSubjectSchema = z.object({
   subject_number: z.string().min(1, 'Subject number is required').max(50).trim(),
   initials: z.string().max(10).trim().optional(),
   screening_date: z.string().date().optional(),
-  baseline_date: z.string().date().optional(),
-  randomization_date: z.string().date().optional(),
 });
 
 export type CreateSubjectSchema = z.infer<typeof createSubjectSchema>;
@@ -201,12 +200,23 @@ export type CreateSubjectSchema = z.infer<typeof createSubjectSchema>;
 export const updateSubjectSchema = z.object({
   initials: z.string().max(10).trim().optional(),
   screening_date: z.string().date().optional(),
-  baseline_date: z.string().date().optional(),
-  randomization_date: z.string().date().optional(),
   end_of_study_date: z.string().date().optional(),
 });
 
 export type UpdateSubjectSchema = z.infer<typeof updateSubjectSchema>;
+
+export const completeBaselineVisitSchema = z.object({
+  baseline_date: z.string().date(),
+});
+
+export type CompleteBaselineVisitSchema = z.infer<typeof completeBaselineVisitSchema>;
+
+export const randomizeSubjectSchema = z.object({
+  randomization_number: z.string().min(1, 'Randomization number is required').max(50).trim(),
+  randomization_date: z.string().date(),
+});
+
+export type RandomizeSubjectSchema = z.infer<typeof randomizeSubjectSchema>;
 
 export const changeSubjectStatusSchema = z.object({
   status: z.enum([

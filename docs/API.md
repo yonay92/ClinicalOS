@@ -368,14 +368,15 @@ Optional:
 
 - initials
 - screening_date
-- baseline_date
-- randomization_date
+
+`baseline_date` and `randomization_date` are not accepted here — see
+`POST /api/subjects/:id/baseline` and `POST /api/subjects/:id/randomize` below.
 
 Business Rules:
 
 - Validate active study.
 - Validate site is assigned to study.
-- Generate visits if required date exists.
+- Schedule a placeholder Baseline visit from the approved template's `is_baseline` item.
 - Create timeline entry.
 - Create audit log.
 
@@ -409,6 +410,39 @@ Updates subject.
 ### POST /api/subjects/:id/status
 
 Changes subject status.
+
+### POST /api/subjects/:id/baseline
+
+Completes the Baseline visit.
+
+Required:
+
+- baseline_date
+
+Business Rules:
+
+- Reject if the subject's baseline date is already recorded.
+- Mark the subject's placeholder Baseline visit Completed with this date.
+- Record `baseline_date` on the subject.
+- Generate the remaining scheduled visits from the approved visit template, anchored
+  to `baseline_date`.
+- Create timeline entry and audit log.
+
+### POST /api/subjects/:id/randomize
+
+Records randomization and moves the subject to Randomized status.
+
+Required:
+
+- randomization_number
+- randomization_date
+
+Business Rules:
+
+- Reject if the subject is already randomized.
+- Reject if the subject's current status is not Screening.
+- Record `randomization_number` and `randomization_date`; set status to `randomized`.
+- Write status history, timeline entry, audit log, and PI/CRC notification.
 
 ### POST /api/subjects/:id/notes
 

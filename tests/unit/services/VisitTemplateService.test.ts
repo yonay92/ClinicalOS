@@ -87,7 +87,7 @@ describe('VisitTemplateService.createTemplate', () => {
       source: 'manual',
       status: 'draft',
     };
-    const items = [{ id: 'item-1', visit_name: 'Screening', visit_order: 1 }];
+    const items = [{ id: 'item-1', visit_name: 'Screening', visit_order: 1, is_baseline: true }];
 
     vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
       makeSupabaseClient(
@@ -99,7 +99,7 @@ describe('VisitTemplateService.createTemplate', () => {
 
     const result = await VisitTemplateService.createTemplate(
       STUDY_ID,
-      [{ visit_name: 'Screening', visit_order: 1 }],
+      [{ visit_name: 'Screening', visit_order: 1, is_baseline: true }],
       makeCtx(),
     );
 
@@ -107,6 +107,36 @@ describe('VisitTemplateService.createTemplate', () => {
     expect(AuditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'visit_template.created' }),
     );
+  });
+
+  it('rejects a template with zero Baseline items', async () => {
+    vi.spyOn(PermissionService, 'requireAnyPermission').mockResolvedValue(undefined);
+
+    await expect(
+      VisitTemplateService.createTemplate(
+        STUDY_ID,
+        [
+          { visit_name: 'Screening', visit_order: 1 },
+          { visit_name: 'Week 4', visit_order: 2, offset_days: 28 },
+        ],
+        makeCtx(),
+      ),
+    ).rejects.toThrow(BusinessRuleError);
+  });
+
+  it('rejects a template with more than one Baseline item', async () => {
+    vi.spyOn(PermissionService, 'requireAnyPermission').mockResolvedValue(undefined);
+
+    await expect(
+      VisitTemplateService.createTemplate(
+        STUDY_ID,
+        [
+          { visit_name: 'Screening', visit_order: 1, is_baseline: true },
+          { visit_name: 'Baseline', visit_order: 2, is_baseline: true },
+        ],
+        makeCtx(),
+      ),
+    ).rejects.toThrow(BusinessRuleError);
   });
 });
 

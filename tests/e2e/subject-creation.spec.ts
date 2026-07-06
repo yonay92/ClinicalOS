@@ -30,9 +30,14 @@ test.describe('Subject creation', () => {
     // a seeded active study with an approved visit template and is covered at the
     // service layer in tests/unit/services and tests/integration; this spec verifies
     // the form renders its required fields and surfaces the business-rule error text.
+    //
+    // Site visibility is not asserted here — whether the Site selector or a
+    // read-only auto-assigned site line renders depends on how many sites the
+    // logged-in user has access to (see SubjectService/site-auto-assign coverage
+    // in the Subject creation form), which this unauthenticated placeholder spec
+    // cannot control.
     await page.goto('/subjects/new');
     await expect(page.getByLabel('Subject number')).toBeVisible();
     await expect(page.getByLabel('Study')).toBeVisible();
-    await expect(page.getByLabel('Site')).toBeVisible();
   });
 });
