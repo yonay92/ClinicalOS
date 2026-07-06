@@ -165,7 +165,13 @@ export const CompanyService = {
       (roles as Array<{ id: string; key: string }>).map((r) => [r.key, r.id]),
     );
 
-    const adminPerms = Array.from(permMap.values());
+    // force_archive_study is a deliberate, per-role override a company owner
+    // grants manually via Settings > Roles — giving every admin the "all
+    // permissions" default would defeat the point of that safeguard.
+    const ADMIN_EXCLUDED_PERMISSIONS = new Set(['force_archive_study']);
+    const adminPerms = Array.from(permMap.entries())
+      .filter(([key]) => !ADMIN_EXCLUDED_PERMISSIONS.has(key))
+      .map(([, id]) => id);
     const ceoPerms = [
       'view_dashboard',
       'view_studies',

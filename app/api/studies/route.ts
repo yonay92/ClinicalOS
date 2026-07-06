@@ -12,11 +12,13 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) return errorResponse('UNAUTHORIZED', 401);
 
   const { searchParams } = new URL(request.url);
+  const view = searchParams.get('view');
   const filters: StudyListFilters = {
     status: (searchParams.get('status') as StudyStatus | null) ?? undefined,
     site_id: searchParams.get('site_id') ?? undefined,
     sponsor: searchParams.get('sponsor') ?? undefined,
     therapeutic_area: searchParams.get('therapeutic_area') ?? undefined,
+    view: view === 'archived' || view === 'all' || view === 'active' ? view : undefined,
   };
 
   try {

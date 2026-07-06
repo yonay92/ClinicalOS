@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { PermissionDeniedError, NotFoundError } from '@/lib/api/errors';
+import { PermissionDeniedError, NotFoundError, BusinessRuleError } from '@/lib/api/errors';
 import type { PermissionKey } from '@/types/roles';
 import type { Profile } from '@/types/users';
 
@@ -60,6 +60,29 @@ export const PermissionService = {
       if (await this.hasPermission(userId, key)) return;
     }
     throw new PermissionDeniedError(permissionKeys.join(' or '));
+  },
+
+  /**
+   * Generic guard for "dangerous operation" business rules: an action that is
+   * normally blocked under some condition, but may be overridden by a caller
+   * holding a specific permission — and if overridden, a reason is mandatory
+   * for the audit trail. Reused across features (e.g. force-archiving a study
+   * with enrolled subjects) rather than reimplemented per call site.
+   */
+  async guardDangerousOperation(
+    userId: string,
+    overridePermissionKey: PermissionKey,
+    options: { blocked: boolean; reason?: string | undefined; blockedMessage: string },
+  ): Promise<void> {
+    if (!options.blocked) return;
+
+    const canOverride = await this.hasPermission(userId, overridePermissionKey);
+    if (!canOverride) {
+      throw new BusinessRuleError(options.blockedMessage);
+    }
+    if (!options.reason?.trim()) {
+      throw new BusinessRuleError('A reason is required to override this safety check.');
+    }
   },
 
   async canAccessSite(userId: string, siteId: string): Promise<boolean> {

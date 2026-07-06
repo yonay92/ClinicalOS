@@ -10,8 +10,12 @@
 --   1. The first company
 --   2. The default system roles (admin, ceo, crc, data_entry,
 --      regulatory, pi) per docs/DATABASE_Part_01_Core_SaaS_Users_Roles_Sites.md
+--   2b. Every permission granted to the Administrator role
 --   3. The administrator auth user + profile
 --   4. The Administrator role assignment
+--
+-- Requires supabase/seed/002_permissions.sql to have been applied first
+-- (so the Administrator role has permission rows to grant in step 2b).
 --
 -- Idempotent: safe to run more than once — every step is a
 -- lookup-or-create, so re-running against an already-bootstrapped
@@ -74,6 +78,23 @@ BEGIN
   SELECT id INTO v_admin_role_id
   FROM roles
   WHERE company_id = v_company_id AND key = 'admin';
+
+  -- ------------------------------------------------------------
+  -- 2b. Administrator role — grant every permission except the ones that
+  -- must be deliberately elevated (force_archive_study is a conscious,
+  -- per-role override a company owner grants via Settings > Roles — it
+  -- would defeat the purpose of that safeguard if every admin got it free).
+  -- Mirrors CompanyService.provision()'s adminPerms (all permission keys
+  -- minus the same exclusion list).
+  -- Without this step, a fresh admin role has zero role_permissions rows
+  -- and therefore zero permissions — not just missing site access.
+  -- Requires supabase/seed/002_permissions.sql to have been applied first.
+  -- ------------------------------------------------------------
+  INSERT INTO role_permissions (company_id, role_id, permission_id, allowed)
+  SELECT v_company_id, v_admin_role_id, p.id, true
+  FROM permissions p
+  WHERE p.key NOT IN ('force_archive_study')
+  ON CONFLICT (company_id, role_id, permission_id) DO NOTHING;
 
   -- ------------------------------------------------------------
   -- 3. Administrator auth user + profile

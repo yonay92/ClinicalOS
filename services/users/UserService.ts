@@ -3,14 +3,14 @@ import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { PermissionService } from '@/services/permissions/PermissionService';
 import { AuditService } from '@/services/audit/AuditService';
 import { NotFoundError, DatabaseError, PermissionDeniedError } from '@/lib/api/errors';
-import type { Profile } from '@/types/users';
+import type { Profile, UserWithAccess } from '@/types/users';
 import type { RequestContext } from '@/types/api';
 
 export const UserService = {
   async list(
     ctx: RequestContext,
     filters?: { role?: string; site?: string; status?: string },
-  ): Promise<Profile[]> {
+  ): Promise<UserWithAccess[]> {
     const supabase = await createServerSupabaseClient();
     let query = supabase
       .from('profiles')
@@ -25,7 +25,49 @@ export const UserService = {
     }
 
     const { data } = await query;
-    return (data as Profile[]) ?? [];
+    const profiles = (data as Profile[]) ?? [];
+    if (profiles.length === 0) return [];
+
+    const userIds = profiles.map((p) => p.id);
+
+    const [{ data: userRoles }, { data: userSites }] = await Promise.all([
+      supabase
+        .from('user_roles')
+        .select('user_id, roles!inner(id, key, name)')
+        .eq('company_id', ctx.company.id)
+        .in('user_id', userIds),
+      supabase
+        .from('user_sites')
+        .select('user_id, sites!inner(id, name)')
+        .eq('company_id', ctx.company.id)
+        .in('user_id', userIds),
+    ]);
+
+    const rolesByUser = new Map<string, UserWithAccess['roles']>();
+    for (const ur of (userRoles as Array<{
+      user_id: string;
+      roles: UserWithAccess['roles'][number];
+    }> | null) ?? []) {
+      const list = rolesByUser.get(ur.user_id) ?? [];
+      list.push(ur.roles);
+      rolesByUser.set(ur.user_id, list);
+    }
+
+    const sitesByUser = new Map<string, UserWithAccess['sites']>();
+    for (const us of (userSites as Array<{
+      user_id: string;
+      sites: UserWithAccess['sites'][number];
+    }> | null) ?? []) {
+      const list = sitesByUser.get(us.user_id) ?? [];
+      list.push(us.sites);
+      sitesByUser.set(us.user_id, list);
+    }
+
+    return profiles.map((p) => ({
+      ...p,
+      roles: rolesByUser.get(p.id) ?? [],
+      sites: sitesByUser.get(p.id) ?? [],
+    }));
   },
 
   async getById(userId: string, ctx: RequestContext): Promise<Profile> {

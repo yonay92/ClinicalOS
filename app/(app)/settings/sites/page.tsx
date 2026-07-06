@@ -56,8 +56,8 @@ export default function SitesSettingsPage() {
     try {
       const res = await fetch('/api/sites');
       if (!res.ok) throw new Error('Failed to load sites');
-      const json = (await res.json()) as { data: { sites: Site[] } };
-      setSites(json.data.sites);
+      const json = (await res.json()) as { data: Site[] };
+      setSites(json.data);
     } catch {
       setError('Failed to load sites. Please refresh.');
     } finally {

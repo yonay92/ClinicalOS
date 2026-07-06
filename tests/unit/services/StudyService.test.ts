@@ -54,11 +54,12 @@ function makeCtx() {
   };
 }
 
-function queryStub(data: unknown, error: unknown = null) {
-  const resolved = Promise.resolve({ data, error });
+function queryStub(data: unknown, error: unknown = null, count: number | null = null) {
+  const resolved = Promise.resolve({ data, error, count });
   const stub: Record<string, unknown> = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
@@ -71,16 +72,18 @@ function queryStub(data: unknown, error: unknown = null) {
     catch: resolved.catch.bind(resolved),
     finally: resolved.finally.bind(resolved),
   };
-  for (const key of ['select', 'eq', 'order', 'limit', 'insert', 'update', 'upsert', 'in']) {
+  for (const key of ['select', 'eq', 'neq', 'order', 'limit', 'insert', 'update', 'upsert', 'in']) {
     (stub[key] as ReturnType<typeof vi.fn>).mockReturnValue(stub);
   }
   return stub;
 }
 
-function makeSupabaseClient(...responses: Array<{ data: unknown; error?: unknown }>) {
+function makeSupabaseClient(
+  ...responses: Array<{ data: unknown; error?: unknown; count?: number | null }>
+) {
   const from = vi.fn();
   for (const r of responses) {
-    from.mockReturnValueOnce(queryStub(r.data, r.error ?? null));
+    from.mockReturnValueOnce(queryStub(r.data, r.error ?? null, r.count ?? null));
   }
   return { from } as never;
 }
@@ -109,7 +112,9 @@ describe('StudyService.create', () => {
       study_name: 'Study A',
       status: 'draft',
     };
-    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(makeSupabaseClient({ data: studyRow }));
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
+      makeSupabaseClient({ data: studyRow }),
+    );
 
     const result = await StudyService.create({ study_name: 'Study A' }, makeCtx());
 
@@ -131,10 +136,14 @@ describe('StudyService.activateStudy', () => {
       status: 'draft',
     };
     // getById() query
-    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(makeSupabaseClient({ data: studyRow }));
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
+      makeSupabaseClient({ data: studyRow }),
+    );
     vi.mocked(VisitTemplateService.hasApprovedTemplate).mockResolvedValue(false);
 
-    await expect(StudyService.activateStudy(STUDY_ID, makeCtx())).rejects.toThrow(BusinessRuleError);
+    await expect(StudyService.activateStudy(STUDY_ID, makeCtx())).rejects.toThrow(
+      BusinessRuleError,
+    );
   });
 
   it('activates the study once an approved visit template exists', async () => {
@@ -154,9 +163,7 @@ describe('StudyService.activateStudy', () => {
     const client = makeSupabaseClient({ data: draftStudy }, { data: activatedStudy }, { data: [] });
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
     vi.mocked(VisitTemplateService.hasApprovedTemplate).mockResolvedValue(true);
-    vi.mocked(createAdminSupabaseClient).mockReturnValue(
-      makeSupabaseClient({ data: [] }) as never,
-    );
+    vi.mocked(createAdminSupabaseClient).mockReturnValue(makeSupabaseClient({ data: [] }) as never);
 
     const result = await StudyService.activateStudy(STUDY_ID, makeCtx());
 
@@ -164,6 +171,177 @@ describe('StudyService.activateStudy', () => {
     expect(AuditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'study.activated' }),
     );
+  });
+});
+
+describe('StudyService.archiveStudy', () => {
+  it('returns the study unchanged when it is already archived', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const archivedStudy = {
+      id: STUDY_ID,
+      company_id: COMPANY_ID,
+      study_name: 'Study A',
+      status: 'archived',
+    };
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
+      makeSupabaseClient({ data: archivedStudy }),
+    );
+
+    const result = await StudyService.archiveStudy(STUDY_ID, makeCtx());
+
+    expect(result.status).toBe('archived');
+    expect(AuditService.log).not.toHaveBeenCalled();
+  });
+
+  it('throws BusinessRuleError when subjects are enrolled and the caller lacks force_archive_study', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    vi.spyOn(PermissionService, 'hasPermission').mockResolvedValue(false);
+
+    const studyRow = {
+      id: STUDY_ID,
+      company_id: COMPANY_ID,
+      study_name: 'Study A',
+      status: 'active',
+    };
+    const client = makeSupabaseClient(
+      { data: studyRow }, // getById
+      { data: null, count: 3 }, // enrolled subjects count
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(StudyService.archiveStudy(STUDY_ID, makeCtx())).rejects.toThrow(BusinessRuleError);
+  });
+
+  it('archives directly when there are no enrolled subjects', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const hasPermissionSpy = vi.spyOn(PermissionService, 'hasPermission');
+
+    const studyRow = {
+      id: STUDY_ID,
+      company_id: COMPANY_ID,
+      study_name: 'Study A',
+      status: 'active',
+    };
+    const archivedStudy = { ...studyRow, status: 'archived' };
+    const client = makeSupabaseClient(
+      { data: studyRow }, // getById
+      { data: null, count: 0 }, // enrolled subjects count
+      { data: archivedStudy }, // update
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    const result = await StudyService.archiveStudy(STUDY_ID, makeCtx());
+
+    expect(result.status).toBe('archived');
+    expect(hasPermissionSpy).not.toHaveBeenCalled();
+    expect(AuditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'study.archived',
+        new_value: expect.objectContaining({ enrolled_subject_count: 0, forced: false }),
+      }),
+    );
+  });
+
+  it('throws BusinessRuleError when the caller holds force_archive_study but gives no reason', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    vi.spyOn(PermissionService, 'hasPermission').mockResolvedValue(true);
+
+    const studyRow = {
+      id: STUDY_ID,
+      company_id: COMPANY_ID,
+      study_name: 'Study A',
+      status: 'active',
+    };
+    const client = makeSupabaseClient(
+      { data: studyRow }, // getById
+      { data: null, count: 2 }, // enrolled subjects count
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(StudyService.archiveStudy(STUDY_ID, makeCtx())).rejects.toThrow(BusinessRuleError);
+  });
+
+  it('archives with enrolled subjects when the caller holds force_archive_study and gives a reason', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    vi.spyOn(PermissionService, 'hasPermission').mockResolvedValue(true);
+
+    const studyRow = {
+      id: STUDY_ID,
+      company_id: COMPANY_ID,
+      study_name: 'Study A',
+      status: 'active',
+    };
+    const archivedStudy = { ...studyRow, status: 'archived' };
+    const client = makeSupabaseClient(
+      { data: studyRow },
+      { data: null, count: 2 },
+      { data: archivedStudy },
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    const result = await StudyService.archiveStudy(
+      STUDY_ID,
+      makeCtx(),
+      'Sponsor requested early termination',
+    );
+
+    expect(result.status).toBe('archived');
+    expect(AuditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'study.archived',
+        new_value: expect.objectContaining({
+          enrolled_subject_count: 2,
+          forced: true,
+          reason: 'Sponsor requested early termination',
+        }),
+      }),
+    );
+  });
+});
+
+describe('StudyService.list — archived visibility', () => {
+  it('excludes archived studies by default', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const client = makeSupabaseClient({ data: [{ id: 's1', status: 'active' }] });
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await StudyService.list({}, makeCtx());
+
+    const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
+    const usedStub = fromMock.mock.results[0]?.value as { neq: ReturnType<typeof vi.fn> };
+    expect(usedStub.neq).toHaveBeenCalledWith('status', 'archived');
+  });
+
+  it('returns only archived studies when view=archived', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const client = makeSupabaseClient({ data: [{ id: 's1', status: 'archived' }] });
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await StudyService.list({ view: 'archived' }, makeCtx());
+
+    const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
+    const usedStub = fromMock.mock.results[0]?.value as { eq: ReturnType<typeof vi.fn> };
+    expect(usedStub.eq).toHaveBeenCalledWith('status', 'archived');
+  });
+
+  it('applies no archived filtering when view=all', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const client = makeSupabaseClient({ data: [] });
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await StudyService.list({ view: 'all' }, makeCtx());
+
+    const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
+    const usedStub = fromMock.mock.results[0]?.value as {
+      eq: ReturnType<typeof vi.fn>;
+      neq: ReturnType<typeof vi.fn>;
+    };
+    expect(usedStub.neq).not.toHaveBeenCalled();
+    expect(usedStub.eq.mock.calls.some((call: unknown[]) => call[0] === 'status')).toBe(false);
   });
 });
 

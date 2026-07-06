@@ -227,6 +227,11 @@ permissions
 - view_all_sites
 - manage_users
 - view_audit_logs
+- force_archive_study — a deliberate override permission (see
+  BUSINESS_RULES_02_Studies.md, Study Archive). Unlike other permissions, it
+  is NOT included in the admin role's default "all permissions" grant
+  (`CompanyService.provision()`, `bootstrap_admin.sql`) — a company owner
+  must consciously enable it per-role from Settings > Roles.
 
 ---
 
@@ -290,6 +295,14 @@ user_sites
 ### Rule
 
 A user can only access records from sites listed in `user_sites`, unless they have a permission such as `view_all_sites`.
+
+### Bootstrap Rule
+
+When the first site is created for a company, every user holding the `admin`
+role is automatically inserted into `user_sites` for that site (see
+`SiteService.create`). This makes the bootstrap administrator's site access
+explicit and visible in Settings → Users, on top of the `view_all_sites`
+permission bypass admins already have.
 
 ---
 

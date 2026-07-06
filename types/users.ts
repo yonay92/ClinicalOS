@@ -47,6 +47,22 @@ export type CompanyModule = {
   created_at: string;
 };
 
+export type UserRoleSummary = {
+  id: string;
+  key: string;
+  name: string;
+};
+
+export type UserSiteSummary = {
+  id: string;
+  name: string;
+};
+
+export type UserWithAccess = Profile & {
+  roles: UserRoleSummary[];
+  sites: UserSiteSummary[];
+};
+
 export type UpdateProfileInput = {
   full_name?: string;
   phone?: string;

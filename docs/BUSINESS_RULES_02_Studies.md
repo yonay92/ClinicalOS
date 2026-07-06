@@ -36,3 +36,33 @@ Actions:
 - Preserve historical data.
 - Archive Regulatory Binder.
 - Generate closeout tasks.
+
+## Study Editing
+
+Study fields (name, protocol number, sponsor, CRO, phase, therapeutic area,
+dates) may be edited at any time by a user with `edit_study` or
+`manage_studies`. Editing is always audit logged.
+
+## Study Archive
+
+ClinicalOS never hard-deletes a Study from the application. "Delete" is
+implemented as Archive (`status = 'archived'`).
+
+Rules:
+
+- Requires `manage_studies`.
+- Blocked if the study has one or more enrolled Subjects, unless the user
+  also holds `force_archive_study` — a permission not granted to any role by
+  default; a company owner must deliberately enable it per-role from
+  Settings > Roles.
+- Forcing an archive (bypassing the enrolled-subjects block) requires a
+  reason. The reason is mandatory only in the forced case — archiving a
+  study with no enrolled subjects does not require one.
+- Archiving is audit logged, including the user, timestamp, enrolled-subject
+  count, whether the block was overridden, and the reason (if any).
+- Archived studies are excluded from the default Studies list; the list's
+  Active / Archived / All filter controls visibility.
+- The underlying override + required-reason mechanism
+  (`PermissionService.guardDangerousOperation`) is generic — intended to be
+  reused for future "dangerous operation" business rules, not specific to
+  Study Archive.

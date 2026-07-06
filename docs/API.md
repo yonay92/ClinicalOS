@@ -164,7 +164,7 @@ Permissions:
 
 ### GET /api/users
 
-Returns users in the current company.
+Returns users in the current company, each with their assigned `roles` and `sites`.
 
 Filters:
 
@@ -218,11 +218,51 @@ Permissions:
 
 ### PATCH /api/users/:id
 
-Updates user profile, roles, status, or site access.
+Updates user profile or status.
 
 Permissions:
 
-- Admin
+- Admin (or self, for own profile)
+
+### POST /api/users/:id/roles
+
+Assigns a role to a user.
+
+Required:
+
+- role_id
+
+Permissions:
+
+- manage_users
+
+### DELETE /api/users/:id/roles/:roleId
+
+Removes a role from a user.
+
+Permissions:
+
+- manage_users
+
+### POST /api/users/:id/sites
+
+Assigns a site to a user.
+
+Required:
+
+- site_id
+
+Permissions:
+
+- manage_users
+
+### DELETE /api/users/:id/sites/:siteId
+
+Removes a site assignment from a user.
+
+Permissions:
+
+- manage_users
 
 ### DELETE /api/users/:id
 
@@ -231,6 +271,23 @@ Soft-deactivates user.
 Permissions:
 
 - Admin
+
+### GET /api/roles
+
+Returns all roles for the company, each with its assigned permissions.
+
+### PATCH /api/roles/:id/permissions
+
+Grants or revokes a single permission on a role.
+
+Required:
+
+- permission_key
+- allowed (boolean)
+
+Permissions:
+
+- manage_users
 
 ---
 
@@ -243,6 +300,13 @@ Returns sites available to the user.
 ### POST /api/sites
 
 Creates a site.
+
+Business Rules:
+
+- If this is the first site created for the company, every user holding the
+  `admin` role is automatically assigned to it via `user_sites` (in addition to
+  the `view_all_sites` permission they already hold, which grants access to
+  every site regardless of explicit assignment).
 
 Permissions:
 
@@ -267,9 +331,11 @@ Returns studies filtered by company and site access.
 Filters:
 
 - site_id
-- status
+- status (exact match)
 - sponsor
 - therapeutic_area
+- view (`active` | `archived` | `all` — defaults to `active`, which excludes
+  archived studies; an explicit `status` filter takes precedence over `view`)
 
 ### POST /api/studies
 
@@ -302,11 +368,12 @@ Permissions:
 
 ### PATCH /api/studies/:id
 
-Updates study.
+Updates study fields (name, protocol number, sponsor, CRO, phase,
+therapeutic area, dates).
 
 Permissions:
 
-- Admin
+- edit_study or manage_studies
 
 ### POST /api/studies/:id/close
 
@@ -315,6 +382,26 @@ Closes study.
 Permissions:
 
 - Admin
+
+### POST /api/studies/:id/archive
+
+Archives a study (see Business Rules — Study Archive). ClinicalOS never
+hard-deletes a study; this is the only "remove" operation available.
+
+Optional:
+
+- reason (required only when overriding the enrolled-subjects block)
+
+Business Rules:
+
+- Blocked if the study has enrolled subjects, unless the caller holds
+  `force_archive_study`, in which case a `reason` is mandatory.
+- Idempotent — archiving an already-archived study is a no-op.
+
+Permissions:
+
+- manage_studies (+ force_archive_study to override the enrolled-subjects
+  block)
 
 ---
 

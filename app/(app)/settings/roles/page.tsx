@@ -28,6 +28,7 @@ export default function RolesSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [togglingRoleId, setTogglingRoleId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -63,6 +64,28 @@ export default function RolesSettingsPage() {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  async function handleToggleForceArchive(role: RoleWithPermissions, allowed: boolean) {
+    setTogglingRoleId(role.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/roles/${role.id}/permissions`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permission_key: 'force_archive_study', allowed }),
+      });
+      const json = (await res.json()) as { success: boolean; message?: string };
+      if (!res.ok || !json.success) {
+        setError(json.message ?? 'Failed to update permission');
+        return;
+      }
+      void fetchData();
+    } catch {
+      setError('An unexpected error occurred');
+    } finally {
+      setTogglingRoleId(null);
+    }
+  }
 
   const moduleGroups = allPermissions.reduce<Record<string, Permission[]>>((acc, p) => {
     const group = acc[p.module] ?? [];
@@ -123,6 +146,24 @@ export default function RolesSettingsPage() {
                   {role.description && (
                     <p className="mb-4 text-sm text-gray-500">{role.description}</p>
                   )}
+
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <label className="flex items-start gap-2 text-sm text-amber-900">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={role.permissions.includes('force_archive_study')}
+                        disabled={togglingRoleId === role.id}
+                        onChange={(e) => void handleToggleForceArchive(role, e.target.checked)}
+                      />
+                      <span>
+                        <span className="font-medium">Force Archive Study</span> — lets this role
+                        archive a study that still has enrolled subjects, bypassing the normal
+                        block. Not granted to any role by default.
+                      </span>
+                    </label>
+                  </div>
+
                   {Object.keys(moduleGroups).length === 0 ? (
                     <p className="text-sm text-gray-500">
                       {role.permissions.length > 0

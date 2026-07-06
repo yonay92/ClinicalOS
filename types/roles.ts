@@ -58,4 +58,5 @@ export type PermissionKey =
   | 'view_audit_logs'
   | 'manage_sites'
   | 'manage_settings'
-  | 'view_analytics';
+  | 'view_analytics'
+  | 'force_archive_study';

@@ -5,9 +5,10 @@
 Filters:
 
 - Sponsor
-- Status
 - Site
 - Therapeutic Area
+- View (Active / Archived / All — defaults to Active; archived studies are
+  hidden unless Archived or All is selected)
 
 ## Study Profile Tabs
 
@@ -22,9 +23,11 @@ Filters:
 
 ## Primary Actions
 
+- Edit Study
 - Upload Protocol
 - Assign Sites
 - Activate Study
 - Close Study
+- Archive Study (never a hard delete — see BUSINESS_RULES_02_Studies.md)
 
 AI suggestions appear in a review panel before approval.

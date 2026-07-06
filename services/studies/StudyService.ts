@@ -25,6 +25,9 @@ export type StudyListFilters = {
   site_id?: string | undefined;
   sponsor?: string | undefined;
   therapeutic_area?: string | undefined;
+  // Archived studies are hidden from the default list. Pass 'archived' or 'all'
+  // to see them; an explicit `status` filter always takes precedence over this.
+  view?: 'active' | 'archived' | 'all' | undefined;
 };
 
 export type UpdateStudyServiceInput = UpdateStudyInput & { site_ids?: string[] };
@@ -43,7 +46,13 @@ export const StudyService = {
         .eq('site_id', filters.site_id);
 
       let studies = ((data as Array<{ studies: Study }> | null) ?? []).map((r) => r.studies);
-      if (filters.status) studies = studies.filter((s) => s.status === filters.status);
+      if (filters.status) {
+        studies = studies.filter((s) => s.status === filters.status);
+      } else if (filters.view === 'archived') {
+        studies = studies.filter((s) => s.status === 'archived');
+      } else if (filters.view !== 'all') {
+        studies = studies.filter((s) => s.status !== 'archived');
+      }
       if (filters.sponsor) studies = studies.filter((s) => s.sponsor === filters.sponsor);
       if (filters.therapeutic_area) {
         studies = studies.filter((s) => s.therapeutic_area === filters.therapeutic_area);
@@ -52,7 +61,13 @@ export const StudyService = {
     }
 
     let query = supabase.from('studies').select(STUDY_COLUMNS).eq('company_id', ctx.company.id);
-    if (filters.status) query = query.eq('status', filters.status);
+    if (filters.status) {
+      query = query.eq('status', filters.status);
+    } else if (filters.view === 'archived') {
+      query = query.eq('status', 'archived');
+    } else if (filters.view !== 'all') {
+      query = query.neq('status', 'archived');
+    }
     if (filters.sponsor) query = query.eq('sponsor', filters.sponsor);
     if (filters.therapeutic_area) query = query.eq('therapeutic_area', filters.therapeutic_area);
 
@@ -220,13 +235,19 @@ export const StudyService = {
     if (isAmendment) {
       await supabase
         .from('studies')
-        .update({ protocol_version: `${(study.protocol_version ?? '1.0')}-amended-${Date.now()}` })
+        .update({ protocol_version: `${study.protocol_version ?? '1.0'}-amended-${Date.now()}` })
         .eq('id', studyId)
         .eq('company_id', ctx.company.id);
 
-      await this.notifyAssignedSites(studyId, ctx.company.id, 'protocol_amendment', ['regulatory', 'crc'], {
-        study_name: study.study_name,
-      });
+      await this.notifyAssignedSites(
+        studyId,
+        ctx.company.id,
+        'protocol_amendment',
+        ['regulatory', 'crc'],
+        {
+          study_name: study.study_name,
+        },
+      );
     }
 
     await AuditService.log({
@@ -469,6 +490,57 @@ export const StudyService = {
     return updated as Study;
   },
 
+  async archiveStudy(studyId: string, ctx: RequestContext, reason?: string): Promise<Study> {
+    await PermissionService.requirePermission(ctx.user.id, 'manage_studies');
+
+    const study = await this.getById(studyId, ctx);
+    if (study.status === 'archived') return study;
+
+    const supabase = await createServerSupabaseClient();
+
+    const { count: enrolledSubjectCount } = await supabase
+      .from('subjects')
+      .select('id', { count: 'exact', head: true })
+      .eq('study_id', studyId)
+      .eq('company_id', ctx.company.id);
+
+    const subjectCount = enrolledSubjectCount ?? 0;
+
+    await PermissionService.guardDangerousOperation(ctx.user.id, 'force_archive_study', {
+      blocked: subjectCount > 0,
+      reason,
+      blockedMessage: `Cannot archive a study with ${subjectCount} enrolled subject(s). Requires the Force Archive Study permission.`,
+    });
+
+    const { data: updated, error } = await supabase
+      .from('studies')
+      .update({ status: 'archived' })
+      .eq('id', studyId)
+      .eq('company_id', ctx.company.id)
+      .select(STUDY_COLUMNS)
+      .single();
+
+    if (error || !updated) throw new DatabaseError(error?.message ?? 'Failed to archive study');
+
+    await AuditService.log({
+      company_id: ctx.company.id,
+      user_id: ctx.user.id,
+      action: 'study.archived',
+      module: 'studies',
+      record_type: 'studies',
+      record_id: studyId,
+      old_value: { status: study.status },
+      new_value: {
+        status: 'archived',
+        enrolled_subject_count: subjectCount,
+        forced: subjectCount > 0,
+        reason: reason?.trim() || null,
+      },
+    });
+
+    return updated as Study;
+  },
+
   async update(
     studyId: string,
     input: UpdateStudyServiceInput,
@@ -514,6 +586,8 @@ export const StudyService = {
         study = await this.activateStudy(studyId, ctx);
       } else if (status === 'closed') {
         study = await this.closeStudy(studyId, ctx);
+      } else if (status === 'archived') {
+        study = await this.archiveStudy(studyId, ctx);
       } else {
         await PermissionService.requirePermission(ctx.user.id, 'manage_studies');
         const supabase = await createServerSupabaseClient();

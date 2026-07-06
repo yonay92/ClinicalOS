@@ -55,6 +55,27 @@ export const updateUserSchema = z.object({
 
 export type UpdateUserSchema = z.infer<typeof updateUserSchema>;
 
+export const assignUserRoleSchema = z.object({
+  role_id: z.string().uuid('Invalid role ID'),
+});
+
+export type AssignUserRoleSchema = z.infer<typeof assignUserRoleSchema>;
+
+export const assignUserSiteSchema = z.object({
+  site_id: z.string().uuid('Invalid site ID'),
+});
+
+export type AssignUserSiteSchema = z.infer<typeof assignUserSiteSchema>;
+
+// ── Roles ─────────────────────────────────────────────────────────────────────
+
+export const updateRolePermissionSchema = z.object({
+  permission_key: z.string().min(1, 'Permission key is required'),
+  allowed: z.boolean(),
+});
+
+export type UpdateRolePermissionSchema = z.infer<typeof updateRolePermissionSchema>;
+
 // ── Sites ─────────────────────────────────────────────────────────────────────
 
 export const createSiteSchema = z.object({
@@ -152,6 +173,12 @@ export const updateStudySchema = z.object({
 });
 
 export type UpdateStudySchema = z.infer<typeof updateStudySchema>;
+
+export const archiveStudySchema = z.object({
+  reason: z.string().min(1).max(1000).trim().optional(),
+});
+
+export type ArchiveStudySchema = z.infer<typeof archiveStudySchema>;
 
 export const assignSitesSchema = z.object({
   site_ids: z.array(z.string().uuid('Invalid site ID')).min(1, 'At least one site is required'),

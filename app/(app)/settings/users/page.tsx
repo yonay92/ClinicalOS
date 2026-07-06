@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/Input';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import type { Profile } from '@/types/users';
+import { UserAccessManager } from '@/components/users/UserAccessManager';
+import type { UserWithAccess } from '@/types/users';
 
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'default' | 'primary' | 'info';
 
@@ -27,7 +28,7 @@ type InviteForm = {
 };
 
 export default function UsersSettingsPage() {
-  const [users, setUsers] = useState<Profile[]>([]);
+  const [users, setUsers] = useState<UserWithAccess[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -47,7 +48,7 @@ export default function UsersSettingsPage() {
     try {
       const res = await fetch('/api/users');
       if (!res.ok) throw new Error('Failed to load users');
-      const json = (await res.json()) as { data?: Profile[] | null };
+      const json = (await res.json()) as { data?: UserWithAccess[] | null };
       setUsers(Array.isArray(json.data) ? json.data : []);
     } catch {
       setError('Failed to load users. Please refresh.');
@@ -134,6 +135,8 @@ export default function UsersSettingsPage() {
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-600">Role(s)</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-600">Sites</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Last Login</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -148,22 +151,51 @@ export default function UsersSettingsPage() {
                       {user.status.replace('_', ' ')}
                     </Badge>
                   </td>
+                  <td className="px-4 py-3">
+                    {user.roles.length === 0 ? (
+                      <span className="text-gray-400">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {user.roles.map((role) => (
+                          <Badge key={role.id} variant="info">
+                            {role.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {user.sites.length === 0 ? (
+                      <span className="text-gray-400">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {user.sites.map((site) => (
+                          <Badge key={site.id} variant="default">
+                            {site.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-500">
                     {user.last_login_at
                       ? new Date(user.last_login_at).toLocaleDateString()
                       : 'Never'}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {user.status === 'active' && (
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        loading={deactivatingId === user.id}
-                        onClick={() => void handleDeactivate(user.id)}
-                      >
-                        Deactivate
-                      </Button>
-                    )}
+                    <div className="flex justify-end gap-2">
+                      <UserAccessManager user={user} onChanged={() => void fetchUsers()} />
+                      {user.status === 'active' && (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          loading={deactivatingId === user.id}
+                          onClick={() => void handleDeactivate(user.id)}
+                        >
+                          Deactivate
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

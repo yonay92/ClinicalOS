@@ -21,18 +21,19 @@ const STATUS_VARIANT: Record<StudyStatus, BadgeVariant> = {
   archived: 'default',
 };
 
+type ViewFilter = 'active' | 'archived' | 'all';
+
 export default function StudiesPage() {
   const [studies, setStudies] = useState<Study[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [viewFilter, setViewFilter] = useState<ViewFilter>('active');
 
   const fetchStudies = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
-      if (statusFilter) params.set('status', statusFilter);
+      const params = new URLSearchParams({ view: viewFilter });
       const res = await fetch(`/api/studies?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load studies');
       const json = (await res.json()) as { data: Study[] };
@@ -42,7 +43,7 @@ export default function StudiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [viewFilter]);
 
   useEffect(() => {
     void fetchStudies();
@@ -68,15 +69,12 @@ export default function StudiesPage() {
       <div className="mb-4 flex gap-3">
         <div className="w-48">
           <Select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            placeholder="All statuses"
+            value={viewFilter}
+            onChange={(e) => setViewFilter(e.target.value as ViewFilter)}
             options={[
-              { value: 'draft', label: 'Draft' },
               { value: 'active', label: 'Active' },
-              { value: 'on_hold', label: 'On Hold' },
-              { value: 'closed', label: 'Closed' },
               { value: 'archived', label: 'Archived' },
+              { value: 'all', label: 'All' },
             ]}
           />
         </div>

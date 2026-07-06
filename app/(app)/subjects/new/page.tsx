@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { AlertBanner } from '@/components/ui/AlertBanner';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { Subject } from '@/types/subjects';
 import type { Study } from '@/types/studies';
 import type { Site } from '@/types/sites';
@@ -29,6 +30,7 @@ const EMPTY_FORM: SubjectForm = {
 
 export default function NewSubjectPage() {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [form, setForm] = useState<SubjectForm>(EMPTY_FORM);
   const [studies, setStudies] = useState<Study[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -98,7 +100,10 @@ export default function NewSubjectPage() {
   }
 
   const singleSite = sites.length === 1 ? sites[0] : null;
-  const noSiteAccess = sitesLoaded && sites.length === 0;
+  const noSites = sitesLoaded && sites.length === 0;
+  // A caller with view_all_sites sees every site in the company — if /api/sites
+  // still came back empty for them, no site exists yet, not that access is denied.
+  const noSitesExistYet = noSites && hasPermission('view_all_sites');
 
   return (
     <div className="max-w-2xl">
@@ -110,11 +115,25 @@ export default function NewSubjectPage() {
         </div>
       )}
 
-      {noSiteAccess && (
+      {noSitesExistYet && (
+        <div className="mb-4 space-y-2">
+          <AlertBanner
+            variant="error"
+            message="No Sites have been created yet. Please create a Site first."
+          />
+          {hasPermission('manage_sites') && (
+            <Button size="sm" variant="outline" onClick={() => router.push('/settings/sites')}>
+              Go to Sites
+            </Button>
+          )}
+        </div>
+      )}
+
+      {noSites && !noSitesExistYet && (
         <div className="mb-4">
           <AlertBanner
             variant="error"
-            message="You don't have access to any site — contact your administrator."
+            message="No sites are available to you yet. Ask an administrator to create a site or assign you to one."
           />
         </div>
       )}
@@ -174,11 +193,7 @@ export default function NewSubjectPage() {
           <Button variant="outline" onClick={() => router.push('/subjects')}>
             Cancel
           </Button>
-          <Button
-            loading={saving}
-            disabled={saving || noSiteAccess}
-            onClick={() => void handleSave()}
-          >
+          <Button loading={saving} disabled={saving || noSites} onClick={() => void handleSave()}>
             Create Subject
           </Button>
         </div>

@@ -68,6 +68,13 @@ export const SiteService = {
     await PermissionService.requirePermission(ctx.user.id, 'manage_sites');
 
     const supabase = await createServerSupabaseClient();
+
+    const { count: existingSiteCount } = await supabase
+      .from('sites')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', ctx.company.id);
+    const isFirstSite = (existingSiteCount ?? 0) === 0;
+
     const { data, error } = await supabase
       .from('sites')
       .insert({ company_id: ctx.company.id, ...input })
@@ -78,17 +85,57 @@ export const SiteService = {
 
     if (error || !data) throw new DatabaseError(error?.message ?? 'Failed to create site');
 
+    const site = data as Site;
+
     await AuditService.log({
       company_id: ctx.company.id,
       user_id: ctx.user.id,
       action: 'site.created',
       module: 'settings',
       record_type: 'sites',
-      record_id: (data as Site).id,
+      record_id: site.id,
       new_value: input as Record<string, unknown>,
     });
 
-    return data as Site;
+    // Bootstrap convenience: the very first site in a company has no one
+    // assigned to it yet, and there's no "manage access" UI moment to do it
+    // manually until this site already exists. Auto-assign every admin so
+    // the assignment is explicit and visible in Settings > Users, on top of
+    // the `view_all_sites` permission bypass admins already have.
+    if (isFirstSite) {
+      const { data: adminUserRoles } = await supabase
+        .from('user_roles')
+        .select('user_id, roles!inner(key)')
+        .eq('company_id', ctx.company.id)
+        .eq('roles.key', 'admin');
+
+      const adminUserIds = (adminUserRoles as Array<{ user_id: string }> | null)?.map(
+        (ur) => ur.user_id,
+      );
+
+      if (adminUserIds && adminUserIds.length > 0) {
+        await supabase.from('user_sites').upsert(
+          adminUserIds.map((userId) => ({
+            company_id: ctx.company.id,
+            user_id: userId,
+            site_id: site.id,
+          })),
+          { onConflict: 'user_id,site_id', ignoreDuplicates: true },
+        );
+
+        await AuditService.log({
+          company_id: ctx.company.id,
+          user_id: ctx.user.id,
+          action: 'user_sites.auto_assigned',
+          module: 'settings',
+          record_type: 'user_sites',
+          record_id: site.id,
+          new_value: { site_id: site.id, user_ids: adminUserIds },
+        });
+      }
+    }
+
+    return site;
   },
 
   async update(

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { PermissionService } from '@/services/permissions/PermissionService';
-import { PermissionDeniedError } from '@/lib/api/errors';
+import { PermissionDeniedError, BusinessRuleError } from '@/lib/api/errors';
 
 const mockFrom = vi.fn();
 const mockSupabase = { from: mockFrom };
@@ -234,6 +234,58 @@ describe('PermissionService.canAccessSite', () => {
     const result = await PermissionService.canAccessSite('user-1', 'site-2');
 
     expect(result).toBe(false);
+  });
+});
+
+// ── guardDangerousOperation ───────────────────────────────────────────────────
+
+describe('PermissionService.guardDangerousOperation', () => {
+  it('resolves without checking permissions when the operation is not blocked', async () => {
+    await expect(
+      PermissionService.guardDangerousOperation('user-1', 'force_archive_study', {
+        blocked: false,
+        blockedMessage: 'blocked',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(createServerSupabaseClient).not.toHaveBeenCalled();
+  });
+
+  it('throws the blocked message when blocked and the caller lacks the override permission', async () => {
+    const rpcClient = { rpc: vi.fn().mockResolvedValue({ data: false }) };
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(rpcClient as never);
+
+    await expect(
+      PermissionService.guardDangerousOperation('user-1', 'force_archive_study', {
+        blocked: true,
+        blockedMessage: 'Cannot archive a study with enrolled subjects',
+      }),
+    ).rejects.toThrow('Cannot archive a study with enrolled subjects');
+  });
+
+  it('throws when blocked, the caller has the override permission, but no reason is given', async () => {
+    const rpcClient = { rpc: vi.fn().mockResolvedValue({ data: true }) };
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(rpcClient as never);
+
+    await expect(
+      PermissionService.guardDangerousOperation('user-1', 'force_archive_study', {
+        blocked: true,
+        blockedMessage: 'blocked',
+      }),
+    ).rejects.toThrow(BusinessRuleError);
+  });
+
+  it('resolves when blocked, the caller has the override permission, and a reason is given', async () => {
+    const rpcClient = { rpc: vi.fn().mockResolvedValue({ data: true }) };
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(rpcClient as never);
+
+    await expect(
+      PermissionService.guardDangerousOperation('user-1', 'force_archive_study', {
+        blocked: true,
+        reason: 'Sponsor requested early termination',
+        blockedMessage: 'blocked',
+      }),
+    ).resolves.toBeUndefined();
   });
 });
 

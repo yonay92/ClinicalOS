@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { EditStudyModal } from '@/components/studies/EditStudyModal';
+import { ArchiveStudyModal } from '@/components/studies/ArchiveStudyModal';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { Study, StudyStatus } from '@/types/studies';
 
@@ -16,13 +18,7 @@ const STATUS_VARIANT: Record<StudyStatus, BadgeVariant> = {
   archived: 'default',
 };
 
-export function StudyProfileHeader({
-  study,
-  onChanged,
-}: {
-  study: Study;
-  onChanged: () => void;
-}) {
+export function StudyProfileHeader({ study, onChanged }: { study: Study; onChanged: () => void }) {
   const { hasPermission } = usePermissions();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +27,8 @@ export function StudyProfileHeader({
     setBusy(true);
     setError(null);
     try {
-      const url = status === 'closed' ? `/api/studies/${study.id}/close` : `/api/studies/${study.id}`;
+      const url =
+        status === 'closed' ? `/api/studies/${study.id}/close` : `/api/studies/${study.id}`;
       const res = await fetch(url, {
         method: status === 'closed' ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -51,6 +48,7 @@ export function StudyProfileHeader({
   }
 
   const canManage = hasPermission('manage_studies');
+  const canEdit = canManage || hasPermission('edit_study');
 
   return (
     <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
@@ -62,18 +60,25 @@ export function StudyProfileHeader({
             {study.ai_generated && <Badge variant="info">AI Draft</Badge>}
           </div>
           <p className="mt-1 text-sm text-gray-500">
-            {[study.sponsor, study.phase, study.therapeutic_area].filter(Boolean).join(' · ') || '—'}
+            {[study.sponsor, study.phase, study.therapeutic_area].filter(Boolean).join(' · ') ||
+              '—'}
           </p>
         </div>
 
-        {canManage && (
+        {canEdit && (
           <div className="flex gap-2">
-            {study.status === 'draft' || study.status === 'on_hold' ? (
-              <Button size="sm" loading={busy} disabled={busy} onClick={() => void updateStatus('active')}>
+            <EditStudyModal study={study} onChanged={onChanged} />
+            {canManage && (study.status === 'draft' || study.status === 'on_hold') ? (
+              <Button
+                size="sm"
+                loading={busy}
+                disabled={busy}
+                onClick={() => void updateStatus('active')}
+              >
                 Activate
               </Button>
             ) : null}
-            {study.status === 'active' && (
+            {canManage && study.status === 'active' && (
               <Button
                 size="sm"
                 variant="danger"
@@ -83,6 +88,9 @@ export function StudyProfileHeader({
               >
                 Close Study
               </Button>
+            )}
+            {canManage && study.status !== 'archived' && (
+              <ArchiveStudyModal study={study} onChanged={onChanged} />
             )}
           </div>
         )}
