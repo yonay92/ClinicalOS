@@ -122,7 +122,7 @@ export default function NewSubjectPage() {
             message="No Sites have been created yet. Please create a Site first."
           />
           {hasPermission('manage_sites') && (
-            <Button size="sm" variant="outline" onClick={() => router.push('/settings/sites')}>
+            <Button size="sm" variant="outline" onClick={() => router.push('/sites')}>
               Go to Sites
             </Button>
           )}

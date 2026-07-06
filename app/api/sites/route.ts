@@ -10,8 +10,17 @@ export async function GET(request: NextRequest) {
   const auth = await resolveAuthContext(request);
   if (!auth.ok) return errorResponse('UNAUTHORIZED', 401);
 
+  const { searchParams } = request.nextUrl;
+  const view = searchParams.get('view');
+
   try {
-    const sites = await SiteService.list({ user: auth.user, company: auth.company });
+    const sites = await SiteService.list(
+      { user: auth.user, company: auth.company },
+      {
+        search: searchParams.get('search') ?? undefined,
+        view: view === 'archived' || view === 'all' || view === 'active' ? view : undefined,
+      },
+    );
     return successResponse(sites);
   } catch (error) {
     logger.error('GET /api/sites failed', {

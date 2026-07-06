@@ -25,6 +25,7 @@ vi.mock('@/services/visit-templates/VisitTemplateService', () => ({
 
 const COMPANY_ID = 'company-uuid';
 const STUDY_ID = 'study-uuid';
+const SITE_ID = 'site-uuid';
 const USER_ID = 'user-uuid';
 
 function makeCtx() {
@@ -65,6 +66,7 @@ function queryStub(data: unknown, error: unknown = null, count: number | null = 
     insert: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     upsert: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
     single: vi.fn().mockResolvedValue({ data, error }),
     in: vi.fn().mockReturnThis(),
@@ -72,7 +74,18 @@ function queryStub(data: unknown, error: unknown = null, count: number | null = 
     catch: resolved.catch.bind(resolved),
     finally: resolved.finally.bind(resolved),
   };
-  for (const key of ['select', 'eq', 'neq', 'order', 'limit', 'insert', 'update', 'upsert', 'in']) {
+  for (const key of [
+    'select',
+    'eq',
+    'neq',
+    'order',
+    'limit',
+    'insert',
+    'update',
+    'upsert',
+    'delete',
+    'in',
+  ]) {
     (stub[key] as ReturnType<typeof vi.fn>).mockReturnValue(stub);
   }
   return stub;
@@ -342,6 +355,76 @@ describe('StudyService.list — archived visibility', () => {
     };
     expect(usedStub.neq).not.toHaveBeenCalled();
     expect(usedStub.eq.mock.calls.some((call: unknown[]) => call[0] === 'status')).toBe(false);
+  });
+});
+
+describe('StudyService.unassignSite', () => {
+  it('throws PermissionDeniedError when user lacks manage_studies', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockRejectedValue(
+      new PermissionDeniedError('manage_studies'),
+    );
+
+    await expect(StudyService.unassignSite(STUDY_ID, SITE_ID, makeCtx())).rejects.toThrow(
+      PermissionDeniedError,
+    );
+  });
+
+  it('deletes the study_sites row and writes an audit log', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const studyRow = {
+      id: STUDY_ID,
+      company_id: COMPANY_ID,
+      study_name: 'Study A',
+      status: 'active',
+    };
+    const client = makeSupabaseClient(
+      { data: studyRow }, // getById
+      { data: null }, // study_sites delete
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await StudyService.unassignSite(STUDY_ID, SITE_ID, makeCtx());
+
+    expect(AuditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'study.site_unassigned',
+        record_id: STUDY_ID,
+        new_value: { site_id: SITE_ID },
+      }),
+    );
+  });
+});
+
+describe('StudyService.listAssignedSites', () => {
+  it('maps study_sites rows joined with sites', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const studyRow = {
+      id: STUDY_ID,
+      company_id: COMPANY_ID,
+      study_name: 'Study A',
+      status: 'active',
+    };
+    const rows = [
+      {
+        id: 'ss-1',
+        status: 'active',
+        site_id: SITE_ID,
+        sites: { name: 'Site A', site_code: '101' },
+      },
+    ];
+    const client = makeSupabaseClient(
+      { data: studyRow }, // getById
+      { data: rows }, // study_sites select
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    const result = await StudyService.listAssignedSites(STUDY_ID, makeCtx());
+
+    expect(result).toEqual([
+      { id: 'ss-1', site_id: SITE_ID, name: 'Site A', site_code: '101', status: 'active' },
+    ]);
   });
 });
 

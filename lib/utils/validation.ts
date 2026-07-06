@@ -81,11 +81,13 @@ export type UpdateRolePermissionSchema = z.infer<typeof updateRolePermissionSche
 export const createSiteSchema = z.object({
   name: z.string().min(1, 'Site name is required').max(200).trim(),
   site_code: z.string().max(50).trim().optional(),
+  principal_investigator: z.string().max(200).trim().optional(),
   address: z.string().max(500).trim().optional(),
   city: z.string().max(100).trim().optional(),
   state: z.string().max(100).trim().optional(),
   zip_code: z.string().max(20).trim().optional(),
   phone: z.string().max(20).trim().optional(),
+  timezone: z.string().max(100).trim().optional(),
 });
 
 export type CreateSiteSchema = z.infer<typeof createSiteSchema>;
@@ -93,15 +95,23 @@ export type CreateSiteSchema = z.infer<typeof createSiteSchema>;
 export const updateSiteSchema = z.object({
   name: z.string().min(1).max(200).trim().optional(),
   site_code: z.string().max(50).trim().optional(),
+  principal_investigator: z.string().max(200).trim().optional(),
   address: z.string().max(500).trim().optional(),
   city: z.string().max(100).trim().optional(),
   state: z.string().max(100).trim().optional(),
   zip_code: z.string().max(20).trim().optional(),
   phone: z.string().max(20).trim().optional(),
-  status: z.enum(['active', 'inactive', 'closed']).optional(),
+  timezone: z.string().max(100).trim().optional(),
+  status: z.enum(['active', 'inactive', 'closed', 'archived']).optional(),
 });
 
 export type UpdateSiteSchema = z.infer<typeof updateSiteSchema>;
+
+export const archiveSiteSchema = z.object({
+  reason: z.string().min(1).max(1000).trim().optional(),
+});
+
+export type ArchiveSiteSchema = z.infer<typeof archiveSiteSchema>;
 
 // ── Company ───────────────────────────────────────────────────────────────────
 

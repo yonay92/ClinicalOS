@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { ComingSoon } from '@/components/ui/ComingSoon';
 import { StudyProfileHeader } from '@/components/studies/StudyProfileHeader';
+import { StudySitesTab } from '@/components/studies/StudySitesTab';
 import { ProtocolUploader } from '@/components/studies/ProtocolUploader';
 import { AIReviewPanel } from '@/components/studies/AIReviewPanel';
 import type { Study } from '@/types/studies';
@@ -127,12 +128,7 @@ export default function StudyProfilePage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      {tab === 'Sites' && (
-        <EmptyState
-          title="Site assignment"
-          description="Assign sites to this study from the study's settings (coming to this tab soon)"
-        />
-      )}
+      {tab === 'Sites' && <StudySitesTab studyId={study.id} />}
 
       {tab === 'Visit Templates' && (
         <div className="rounded-xl border border-gray-200 bg-white p-4">

@@ -297,6 +297,12 @@ Permissions:
 
 Returns sites available to the user.
 
+Filters:
+
+- search (matches name, site number, or city)
+- view (`active` | `archived` | `all` — defaults to `active`, which excludes
+  archived sites)
+
 ### POST /api/sites
 
 Creates a site.
@@ -310,15 +316,47 @@ Business Rules:
 
 Permissions:
 
-- Admin
+- manage_sites
+
+### GET /api/sites/:id
+
+Returns a single site.
 
 ### PATCH /api/sites/:id
 
-Updates a site.
+Updates a site (name, site number, PI, address, phone, timezone, status).
 
 Permissions:
 
-- Admin
+- manage_sites
+
+### POST /api/sites/:id/archive
+
+Archives a site (see `BUSINESS_RULES` — Site Archive, in
+`DATABASE_Part_01_Core_SaaS_Users_Roles_Sites.md`). ClinicalOS never
+hard-deletes a site; this is the only "remove" operation available.
+
+Optional:
+
+- reason (required only when overriding the enrolled-subjects block)
+
+Business Rules:
+
+- Blocked if the site has enrolled subjects, unless the caller holds
+  `force_archive_site`, in which case a `reason` is mandatory.
+- Idempotent — archiving an already-archived site is a no-op.
+
+Permissions:
+
+- manage_sites (+ force_archive_site to override the enrolled-subjects block)
+
+### GET /api/sites/:id/studies
+
+Returns studies assigned to this site.
+
+### GET /api/sites/:id/users
+
+Returns staff (users) assigned to this site, each with their role(s).
 
 ---
 
@@ -402,6 +440,19 @@ Permissions:
 
 - manage_studies (+ force_archive_study to override the enrolled-subjects
   block)
+
+### GET /api/studies/:id/sites
+
+Returns sites assigned to this study.
+
+### DELETE /api/studies/:id/sites/:siteId
+
+Removes a site assignment from this study. (Assigning a site reuses
+`PATCH /api/studies/:id` with a `site_ids` array — see above.)
+
+Permissions:
+
+- manage_studies
 
 ---
 

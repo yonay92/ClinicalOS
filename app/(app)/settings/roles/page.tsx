@@ -12,6 +12,23 @@ type RoleWithPermissions = Role & {
   permissions: string[];
 };
 
+// Dangerous-operation overrides (see PermissionService.guardDangerousOperation) —
+// never granted to any role by default; a company owner must consciously enable
+// each one per-role here. Add future overrides (e.g. force_* for other modules)
+// to this list rather than building bespoke UI per permission.
+const OVERRIDE_PERMISSIONS: Array<{ key: string; label: string; description: string }> = [
+  {
+    key: 'force_archive_study',
+    label: 'Force Archive Study',
+    description: 'archive a study that still has enrolled subjects, bypassing the normal block',
+  },
+  {
+    key: 'force_archive_site',
+    label: 'Force Archive Site',
+    description: 'archive a site that still has enrolled subjects, bypassing the normal block',
+  },
+];
+
 type ApiRolesResponse = {
   data: {
     roles: Array<
@@ -65,14 +82,18 @@ export default function RolesSettingsPage() {
     void fetchData();
   }, [fetchData]);
 
-  async function handleToggleForceArchive(role: RoleWithPermissions, allowed: boolean) {
+  async function handleToggleOverride(
+    role: RoleWithPermissions,
+    permissionKey: string,
+    allowed: boolean,
+  ) {
     setTogglingRoleId(role.id);
     setError(null);
     try {
       const res = await fetch(`/api/roles/${role.id}/permissions`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permission_key: 'force_archive_study', allowed }),
+        body: JSON.stringify({ permission_key: permissionKey, allowed }),
       });
       const json = (await res.json()) as { success: boolean; message?: string };
       if (!res.ok || !json.success) {
@@ -147,21 +168,27 @@ export default function RolesSettingsPage() {
                     <p className="mb-4 text-sm text-gray-500">{role.description}</p>
                   )}
 
-                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                    <label className="flex items-start gap-2 text-sm text-amber-900">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5"
-                        checked={role.permissions.includes('force_archive_study')}
-                        disabled={togglingRoleId === role.id}
-                        onChange={(e) => void handleToggleForceArchive(role, e.target.checked)}
-                      />
-                      <span>
-                        <span className="font-medium">Force Archive Study</span> — lets this role
-                        archive a study that still has enrolled subjects, bypassing the normal
-                        block. Not granted to any role by default.
-                      </span>
-                    </label>
+                  <div className="mb-4 space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    {OVERRIDE_PERMISSIONS.map((override) => (
+                      <label
+                        key={override.key}
+                        className="flex items-start gap-2 text-sm text-amber-900"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={role.permissions.includes(override.key)}
+                          disabled={togglingRoleId === role.id}
+                          onChange={(e) =>
+                            void handleToggleOverride(role, override.key, e.target.checked)
+                          }
+                        />
+                        <span>
+                          <span className="font-medium">{override.label}</span> — lets this role{' '}
+                          {override.description}. Not granted to any role by default.
+                        </span>
+                      </label>
+                    ))}
                   </div>
 
                   {Object.keys(moduleGroups).length === 0 ? (

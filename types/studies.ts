@@ -45,6 +45,14 @@ export type StudySite = {
   created_at: string;
 };
 
+export type StudyAssignedSite = {
+  id: string;
+  site_id: string;
+  name: string;
+  site_code: string | null;
+  status: StudySiteStatus;
+};
+
 export type StudyStaffRole =
   'pi' | 'sub_i' | 'crc' | 'data_entry' | 'regulatory' | 'site_director' | 'other';
 

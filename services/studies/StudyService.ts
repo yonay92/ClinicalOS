@@ -12,6 +12,7 @@ import type {
   CreateStudyInput,
   UpdateStudyInput,
   StudySite,
+  StudyAssignedSite,
   StudyAiExtraction,
   FileRecord,
 } from '@/types/studies';
@@ -393,6 +394,58 @@ export const StudyService = {
     });
 
     return (data as StudySite[]) ?? [];
+  },
+
+  async listAssignedSites(studyId: string, ctx: RequestContext): Promise<StudyAssignedSite[]> {
+    await PermissionService.requirePermission(ctx.user.id, 'view_studies');
+    await this.getById(studyId, ctx);
+
+    const supabase = await createServerSupabaseClient();
+    const { data } = await supabase
+      .from('study_sites')
+      .select('id, status, site_id, sites!inner(name, site_code)')
+      .eq('study_id', studyId)
+      .eq('company_id', ctx.company.id);
+
+    type Row = {
+      id: string;
+      status: StudyAssignedSite['status'];
+      site_id: string;
+      sites: { name: string; site_code: string | null };
+    };
+
+    return ((data as Row[] | null) ?? []).map((row) => ({
+      id: row.id,
+      site_id: row.site_id,
+      name: row.sites.name,
+      site_code: row.sites.site_code,
+      status: row.status,
+    }));
+  },
+
+  async unassignSite(studyId: string, siteId: string, ctx: RequestContext): Promise<void> {
+    await PermissionService.requirePermission(ctx.user.id, 'manage_studies');
+    await this.getById(studyId, ctx);
+
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from('study_sites')
+      .delete()
+      .eq('study_id', studyId)
+      .eq('site_id', siteId)
+      .eq('company_id', ctx.company.id);
+
+    if (error) throw new DatabaseError(error.message);
+
+    await AuditService.log({
+      company_id: ctx.company.id,
+      user_id: ctx.user.id,
+      action: 'study.site_unassigned',
+      module: 'studies',
+      record_type: 'studies',
+      record_id: studyId,
+      new_value: { site_id: siteId },
+    });
   },
 
   async activateStudy(studyId: string, ctx: RequestContext): Promise<Study> {

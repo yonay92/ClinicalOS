@@ -57,6 +57,8 @@ function makeTrackingClient(data: unknown = [], error: unknown = null) {
       eqCalls.push([col, val]);
       return chain;
     }),
+    neq: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     maybeSingle: vi

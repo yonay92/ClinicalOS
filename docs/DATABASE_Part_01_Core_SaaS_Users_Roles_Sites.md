@@ -232,6 +232,9 @@ permissions
   is NOT included in the admin role's default "all permissions" grant
   (`CompanyService.provision()`, `bootstrap_admin.sql`) — a company owner
   must consciously enable it per-role from Settings > Roles.
+- force_archive_site — same override pattern as `force_archive_study`,
+  applied to Site Archive (see §10 Site Archive Rule below). Also excluded
+  from the admin default grant.
 
 ---
 
@@ -260,12 +263,14 @@ sites
 - id uuid primary key
 - company_id uuid references companies(id)
 - name text not null
-- site_code text
+- site_code text          -- displayed as "Site Number" in the UI
+- principal_investigator text
 - address text
 - city text
 - state text
 - zip_code text
 - phone text
+- timezone text
 - status text default 'active'
 - created_at timestamptz default now()
 - updated_at timestamptz default now()
@@ -275,7 +280,18 @@ sites
 
 - active
 - inactive
-- closed
+- closed (legacy — the Sites module UI only exposes Active/Inactive/Archived)
+- archived
+
+### Site Archive Rule
+
+Mirrors the Study Archive rule (`BUSINESS_RULES_02_Studies.md`): archiving is
+blocked if the site has one or more enrolled Subjects, unless the caller
+holds `force_archive_site` (not granted to any role by default — enabled
+per-role from Settings > Roles) and supplies a reason. Fully audit logged
+(`site.archived`, including enrolled-subject count, forced flag, reason).
+Archived sites are excluded from the default Sites list; the list's
+Active / Archived / All filter controls visibility.
 
 ---
 

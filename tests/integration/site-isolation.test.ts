@@ -53,6 +53,8 @@ function makeSiteListClient(siteRows: unknown[]) {
   const chain = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     then: undefined as unknown,
   };

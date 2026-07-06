@@ -59,4 +59,5 @@ export type PermissionKey =
   | 'manage_sites'
   | 'manage_settings'
   | 'view_analytics'
-  | 'force_archive_study';
+  | 'force_archive_study'
+  | 'force_archive_site';
