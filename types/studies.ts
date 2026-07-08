@@ -9,6 +9,11 @@ export type Study = {
   cro: string | null;
   phase: string | null;
   therapeutic_area: string | null;
+  indication: string | null;
+  estimated_enrollment: number | null;
+  study_duration: string | null;
+  study_design: string | null;
+  primary_endpoint: string | null;
   status: StudyStatus;
   start_date: string | null;
   end_date: string | null;
@@ -22,10 +27,16 @@ export type Study = {
 export type CreateStudyInput = {
   study_name: string;
   protocol_number?: string;
+  protocol_version?: string;
   sponsor?: string;
   cro?: string;
   phase?: string;
   therapeutic_area?: string;
+  indication?: string;
+  estimated_enrollment?: number;
+  study_duration?: string;
+  study_design?: string;
+  primary_endpoint?: string;
   start_date?: string;
   end_date?: string;
 };
@@ -157,6 +168,42 @@ export type StudyAiExtraction = {
   reviewed_at: string | null;
   approved: boolean;
   created_at: string;
+};
+
+export type StudyDraftStatus = 'processing' | 'ready' | 'failed' | 'finalized';
+
+export type StudyDraftProfile = {
+  study_name?: string | null;
+  protocol_number?: string | null;
+  protocol_version?: string | null;
+  sponsor?: string | null;
+  cro?: string | null;
+  phase?: string | null;
+  therapeutic_area?: string | null;
+  indication?: string | null;
+  estimated_enrollment?: number | null;
+  study_duration?: string | null;
+  study_design?: string | null;
+  primary_endpoint?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+};
+
+export type StudyDraft = {
+  id: string;
+  company_id: string;
+  file_id: string;
+  status: StudyDraftStatus;
+  confidence: number | null;
+  uncertain_fields: string[];
+  extracted_profile: StudyDraftProfile;
+  extracted_visit_items: CreateVisitTemplateItemInput[];
+  extracted_extra: Record<string, unknown>;
+  error_message: string | null;
+  study_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type FileRecord = {

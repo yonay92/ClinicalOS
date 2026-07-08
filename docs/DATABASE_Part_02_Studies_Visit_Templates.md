@@ -239,9 +239,47 @@ study_ai_extractions
 
 AI extraction never becomes production data until reviewed and approved.
 
+`study_ai_extractions` is only used for **amendments to an existing study**
+(`POST /api/studies/:id/protocol`). The new-study-from-protocol flow uses `study_drafts`
+(below) instead, since no `studies` row exists yet to attach an extraction to.
+
 ---
 
-## 9. Suggested Indexes
+## 9. Table: study_drafts
+
+Temporary holding area for a protocol upload that has **not yet become a study**. The Guided
+AI Draft workflow (`POST /api/studies/ai-drafts`) uploads the protocol PDF and runs the Protocol
+Agent against this table instead of a real `studies` row; a human reviews and edits every field
+and the visit schedule before "Finalize" creates the real study.
+
+```sql
+study_drafts
+- id uuid primary key
+- company_id uuid references companies(id)
+- file_id uuid references files(id)              -- the uploaded protocol PDF
+- status text not null default 'processing'      -- processing | ready | failed | finalized
+- confidence numeric
+- uncertain_fields jsonb not null default '[]'    -- ["field — reason", ...]
+- extracted_profile jsonb not null default '{}'   -- study_name, sponsor, indication, ... (nulls left blank, never guessed)
+- extracted_visit_items jsonb not null default '[]'
+- extracted_extra jsonb not null default '{}'     -- inclusion/exclusion criteria, schedule of assessments, required documents
+- error_message text
+- study_id uuid references studies(id)            -- populated once finalized
+- created_by uuid references profiles(id)
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+```
+
+### Rule
+
+A draft never becomes a study on its own. `POST /api/studies/ai-drafts/:id/finalize` is the only
+path that creates the `studies` row, the visit template (if any items were submitted), and the
+`study_documents` row attaching the protocol PDF — all from the (possibly human-edited) draft
+contents, validated by `finalizeAiDraftSchema`.
+
+---
+
+## 10. Suggested Indexes
 
 ```sql
 create index idx_studies_company on studies(company_id);
@@ -250,28 +288,32 @@ create index idx_study_sites_site on study_sites(site_id);
 create index idx_study_staff_study on study_staff(study_id);
 create index idx_visit_templates_study on visit_templates(study_id);
 create index idx_visit_template_items_template on visit_template_items(template_id);
+create index idx_study_drafts_company on study_drafts(company_id);
 ```
 
 ---
 
-## 10. Workflow
+## 11. Workflow
 
 ```text
 Upload Protocol
-→ AI extracts study profile and visit schedule
-→ Admin reviews extraction
+→ AI extracts a study_drafts row (study profile + visit schedule; unknowns left blank)
+→ Human reviews and edits every field on the guided review screen
+→ Human finalizes: real Study + Visit Template + protocol Document are created together
 → Admin selects sites
-→ Admin approves study
+→ Admin approves the visit template
 → Visit Template becomes active
 → Subjects can be created
 ```
 
 ---
 
-## 11. Implementation Notes for Claude
+## 12. Implementation Notes for Claude
 
 - Do not allow automatic activation of AI-extracted templates.
 - Always require Review & Approve.
 - Support manual template creation.
 - Support protocol amendments by creating new template versions.
 - Never overwrite old visit templates.
+- New-study-from-protocol uploads must not create a `studies` row until the human finalizes the
+  `study_drafts` review — see `POST /api/studies/ai-drafts/:id/finalize`.

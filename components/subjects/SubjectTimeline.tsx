@@ -45,10 +45,8 @@ export function SubjectTimeline({ subjectId }: { subjectId: string }) {
     <ol className="space-y-4 border-l border-gray-200 pl-4">
       {events.map((event) => (
         <li key={event.id} className="relative">
-          <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-blue-500" />
-          <p className="text-sm font-medium text-gray-900">
-            {event.event_type.replace(/_/g, ' ')}
-          </p>
+          <span className="absolute top-1 -left-[21px] h-2.5 w-2.5 rounded-full bg-blue-500" />
+          <p className="text-sm font-medium text-gray-900">{event.event_type.replace(/_/g, ' ')}</p>
           {event.description && <p className="text-sm text-gray-600">{event.description}</p>}
           <p className="text-xs text-gray-400">{new Date(event.event_date).toLocaleString()}</p>
         </li>

@@ -15,7 +15,7 @@ export default function UploadProtocolPage() {
       />
       <ProtocolUploader
         onUploaded={(result) => {
-          if (result.study?.id) router.push(`/studies/${result.study.id}`);
+          if (result.draft?.id) router.push(`/studies/ai-drafts/${result.draft.id}`);
         }}
       />
     </div>

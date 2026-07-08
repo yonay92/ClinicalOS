@@ -12,7 +12,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
 
   try {
-    const timeline = await SubjectService.listTimeline(id, { user: auth.user, company: auth.company });
+    const timeline = await SubjectService.listTimeline(id, {
+      user: auth.user,
+      company: auth.company,
+    });
     return successResponse(timeline);
   } catch (error) {
     if (error instanceof PermissionDeniedError) return errorResponse('FORBIDDEN', 403);

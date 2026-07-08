@@ -122,43 +122,6 @@ export const StudyService = {
     return data as Study;
   },
 
-  async createFromProtocol(
-    file: File,
-    ctx: RequestContext,
-  ): Promise<{ study: Study; extraction_id: string | null }> {
-    await PermissionService.requirePermission(ctx.user.id, 'create_study');
-
-    const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from('studies')
-      .insert({
-        company_id: ctx.company.id,
-        created_by: ctx.user.id,
-        status: 'draft',
-        ai_generated: true,
-        study_name: `Draft study — ${file.name}`,
-      })
-      .select(STUDY_COLUMNS)
-      .single();
-
-    if (error || !data) throw new DatabaseError(error?.message ?? 'Failed to create draft study');
-
-    const study = data as Study;
-
-    await AuditService.log({
-      company_id: ctx.company.id,
-      user_id: ctx.user.id,
-      action: 'study.created',
-      module: 'studies',
-      record_type: 'studies',
-      record_id: study.id,
-      new_value: { source: 'protocol_upload', file_name: file.name },
-    });
-
-    const { extraction_id } = await this.uploadProtocol(study.id, file, ctx);
-    return { study, extraction_id };
-  },
-
   async uploadProtocol(
     studyId: string,
     file: File,
@@ -293,10 +256,16 @@ export const StudyService = {
       const fields = [
         'study_name',
         'protocol_number',
+        'protocol_version',
         'sponsor',
         'cro',
         'phase',
         'therapeutic_area',
+        'indication',
+        'estimated_enrollment',
+        'study_duration',
+        'study_design',
+        'primary_endpoint',
         'start_date',
         'end_date',
       ] as const;

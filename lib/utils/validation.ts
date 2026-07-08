@@ -157,6 +157,15 @@ export const getNotificationsSchema = z.object({
 
 // ── Studies ───────────────────────────────────────────────────────────────────
 
+const studyDraftFieldsSchema = {
+  protocol_version: z.string().max(100).trim().optional(),
+  indication: z.string().max(500).trim().optional(),
+  estimated_enrollment: z.number().int().positive().optional(),
+  study_duration: z.string().max(200).trim().optional(),
+  study_design: z.string().max(1000).trim().optional(),
+  primary_endpoint: z.string().max(1000).trim().optional(),
+};
+
 export const createStudySchema = z.object({
   study_name: z.string().min(1, 'Study name is required').max(300).trim(),
   protocol_number: z.string().max(100).trim().optional(),
@@ -166,6 +175,7 @@ export const createStudySchema = z.object({
   therapeutic_area: z.string().max(200).trim().optional(),
   start_date: z.string().date().optional(),
   end_date: z.string().date().optional(),
+  ...studyDraftFieldsSchema,
 });
 
 export type CreateStudySchema = z.infer<typeof createStudySchema>;
@@ -180,6 +190,7 @@ export const updateStudySchema = z.object({
   start_date: z.string().date().optional(),
   end_date: z.string().date().optional(),
   status: z.enum(['draft', 'active', 'on_hold', 'closed', 'archived']).optional(),
+  ...studyDraftFieldsSchema,
 });
 
 export type UpdateStudySchema = z.infer<typeof updateStudySchema>;
@@ -221,6 +232,21 @@ export const createVisitTemplateSchema = z.object({
 });
 
 export type CreateVisitTemplateSchema = z.infer<typeof createVisitTemplateSchema>;
+
+export const finalizeAiDraftSchema = z.object({
+  study_name: z.string().min(1, 'Study title is required').max(300).trim(),
+  protocol_number: z.string().max(100).trim().optional(),
+  sponsor: z.string().max(200).trim().optional(),
+  cro: z.string().max(200).trim().optional(),
+  phase: z.string().max(50).trim().optional(),
+  therapeutic_area: z.string().max(200).trim().optional(),
+  start_date: z.string().date().optional(),
+  end_date: z.string().date().optional(),
+  ...studyDraftFieldsSchema,
+  visit_template_items: z.array(visitTemplateItemSchema).optional(),
+});
+
+export type FinalizeAiDraftSchema = z.infer<typeof finalizeAiDraftSchema>;
 
 // ── Subjects ──────────────────────────────────────────────────────────────────
 

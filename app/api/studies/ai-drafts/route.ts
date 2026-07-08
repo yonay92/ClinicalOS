@@ -1,12 +1,14 @@
 import { type NextRequest } from 'next/server';
 import { resolveAuthContext } from '@/lib/api/middleware';
 import { successResponse, errorResponse } from '@/lib/api/response';
-import { StudyService } from '@/services/studies/StudyService';
+import { AIDraftService } from '@/services/studies/AIDraftService';
 import { PermissionDeniedError } from '@/lib/api/errors';
 import { logger } from '@/lib/logger';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
 
+// Uploads a protocol PDF and starts AI extraction into a temporary draft — no `studies` row is
+// created until the user reviews and finalizes it via POST /api/studies/ai-drafts/:id/finalize.
 export async function POST(request: NextRequest) {
   const auth = await resolveAuthContext(request);
   if (!auth.ok) return errorResponse('UNAUTHORIZED', 401);
@@ -25,14 +27,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await StudyService.createFromProtocol(file, {
+    const draft = await AIDraftService.createDraft(file, {
       user: auth.user,
       company: auth.company,
     });
-    return successResponse(result, 'Protocol uploaded — AI extraction in progress', 201);
+    return successResponse({ draft }, 'Protocol uploaded — AI extraction in progress', 201);
   } catch (error) {
     if (error instanceof PermissionDeniedError) return errorResponse('FORBIDDEN', 403);
-    logger.error('POST /api/studies/from-protocol failed', {
+    logger.error('POST /api/studies/ai-drafts failed', {
       error: error instanceof Error ? error.message : String(error),
     });
     return errorResponse('INTERNAL_ERROR', 500);

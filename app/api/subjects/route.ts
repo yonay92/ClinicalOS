@@ -3,7 +3,12 @@ import { resolveAuthContext } from '@/lib/api/middleware';
 import { successResponse, errorResponse } from '@/lib/api/response';
 import { createSubjectSchema } from '@/lib/utils/validation';
 import { SubjectService, type SubjectListFilters } from '@/services/subjects/SubjectService';
-import { PermissionDeniedError, NotFoundError, BusinessRuleError, DuplicateRecordError } from '@/lib/api/errors';
+import {
+  PermissionDeniedError,
+  NotFoundError,
+  BusinessRuleError,
+  DuplicateRecordError,
+} from '@/lib/api/errors';
 import { logger } from '@/lib/logger';
 import type { SubjectStatus } from '@/types/subjects';
 

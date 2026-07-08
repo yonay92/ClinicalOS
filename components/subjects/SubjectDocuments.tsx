@@ -68,7 +68,9 @@ export function SubjectDocuments({ subjectId }: { subjectId: string }) {
     <div className="space-y-4">
       {hasPermission('edit_subject') && (
         <div className="space-y-3">
-          {error && <AlertBanner variant="error" message={error} onDismiss={() => setError(null)} />}
+          {error && (
+            <AlertBanner variant="error" message={error} onDismiss={() => setError(null)} />
+          )}
           <div
             onDragOver={(e) => {
               e.preventDefault();
@@ -112,7 +114,10 @@ export function SubjectDocuments({ subjectId }: { subjectId: string }) {
           <LoadingSpinner />
         </div>
       ) : documents.length === 0 ? (
-        <EmptyState title="No documents yet" description="Files uploaded for this subject appear here" />
+        <EmptyState
+          title="No documents yet"
+          description="Files uploaded for this subject appear here"
+        />
       ) : (
         <div className="space-y-2">
           {documents.map((doc) => (

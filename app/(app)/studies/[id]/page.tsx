@@ -112,6 +112,26 @@ export default function StudyProfilePage({ params }: { params: Promise<{ id: str
                 <dt className="text-gray-500">Protocol version</dt>
                 <dd className="text-gray-900">{study.protocol_version ?? '—'}</dd>
               </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Indication</dt>
+                <dd className="text-gray-900">{study.indication ?? '—'}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Estimated enrollment</dt>
+                <dd className="text-gray-900">{study.estimated_enrollment ?? '—'}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Study duration</dt>
+                <dd className="text-gray-900">{study.study_duration ?? '—'}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Study design</dt>
+                <dd className="text-gray-900">{study.study_design ?? '—'}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Primary endpoint</dt>
+                <dd className="text-gray-900">{study.primary_endpoint ?? '—'}</dd>
+              </div>
             </dl>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">

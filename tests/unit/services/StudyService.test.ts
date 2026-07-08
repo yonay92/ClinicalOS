@@ -447,4 +447,45 @@ describe('StudyService.approveAIExtraction', () => {
       StudyService.approveAIExtraction('extraction-1', makeCtx(), STUDY_ID),
     ).rejects.toThrow('AI extraction');
   });
+
+  it('applies the new AI-extracted profile fields (indication, enrollment, etc.) to the study', async () => {
+    vi.spyOn(PermissionService, 'requireAnyPermission').mockResolvedValue(undefined);
+
+    const extractionRow = {
+      id: 'extraction-1',
+      company_id: COMPANY_ID,
+      study_id: STUDY_ID,
+      extraction_type: 'study_profile',
+      extracted_data: {
+        study_name: 'Study A',
+        indication: 'Type 2 Diabetes',
+        estimated_enrollment: 250,
+        study_duration: '52 weeks',
+        study_design: 'Randomized, double-blind',
+        primary_endpoint: 'Change in HbA1c from baseline',
+      },
+    };
+    const client = makeSupabaseClient(
+      { data: extractionRow }, // study_ai_extractions select
+      { data: null }, // studies update
+      { data: { ...extractionRow, approved: true } }, // study_ai_extractions update+select
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await StudyService.approveAIExtraction('extraction-1', makeCtx(), STUDY_ID);
+
+    const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
+    const studiesUpdateStub = fromMock.mock.results[1]?.value as {
+      update: ReturnType<typeof vi.fn>;
+    };
+    expect(studiesUpdateStub.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        indication: 'Type 2 Diabetes',
+        estimated_enrollment: 250,
+        study_duration: '52 weeks',
+        study_design: 'Randomized, double-blind',
+        primary_endpoint: 'Change in HbA1c from baseline',
+      }),
+    );
+  });
 });

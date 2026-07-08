@@ -52,7 +52,10 @@ export default function SubjectsPage() {
 
   useEffect(() => {
     void (async () => {
-      const [studiesRes, sitesRes] = await Promise.all([fetch('/api/studies'), fetch('/api/sites')]);
+      const [studiesRes, sitesRes] = await Promise.all([
+        fetch('/api/studies'),
+        fetch('/api/sites'),
+      ]);
       if (studiesRes.ok) setStudies(((await studiesRes.json()) as { data: Study[] }).data);
       if (sitesRes.ok) setSites(((await sitesRes.json()) as { data: Site[] }).data);
     })();

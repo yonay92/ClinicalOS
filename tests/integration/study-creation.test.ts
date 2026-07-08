@@ -97,8 +97,15 @@ describe('Study company isolation', () => {
 
   it('returns the study when it belongs to the caller company', async () => {
     vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
-    const studyRow = { id: STUDY_ID, company_id: COMPANY_A, study_name: 'Study A', status: 'draft' };
-    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(makeSupabaseClient({ data: studyRow }));
+    const studyRow = {
+      id: STUDY_ID,
+      company_id: COMPANY_A,
+      study_name: 'Study A',
+      status: 'draft',
+    };
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
+      makeSupabaseClient({ data: studyRow }),
+    );
 
     const result = await StudyService.getById(STUDY_ID, makeCtx(COMPANY_A));
     expect(result.company_id).toBe(COMPANY_A);
@@ -110,8 +117,15 @@ describe('Visit template approval gate blocks activation', () => {
     vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
     vi.spyOn(VisitTemplateService, 'hasApprovedTemplate').mockResolvedValue(false);
 
-    const draftStudy = { id: STUDY_ID, company_id: COMPANY_A, study_name: 'Study A', status: 'draft' };
-    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(makeSupabaseClient({ data: draftStudy }));
+    const draftStudy = {
+      id: STUDY_ID,
+      company_id: COMPANY_A,
+      study_name: 'Study A',
+      status: 'draft',
+    };
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
+      makeSupabaseClient({ data: draftStudy }),
+    );
 
     await expect(StudyService.activateStudy(STUDY_ID, makeCtx(COMPANY_A))).rejects.toThrow(
       BusinessRuleError,
@@ -123,7 +137,12 @@ describe('Visit template approval gate blocks activation', () => {
     vi.spyOn(VisitTemplateService, 'hasApprovedTemplate').mockResolvedValue(true);
     vi.mocked(createAdminSupabaseClient).mockReturnValue(makeSupabaseClient({ data: [] }) as never);
 
-    const draftStudy = { id: STUDY_ID, company_id: COMPANY_A, study_name: 'Study A', status: 'draft' };
+    const draftStudy = {
+      id: STUDY_ID,
+      company_id: COMPANY_A,
+      study_name: 'Study A',
+      status: 'draft',
+    };
     const activeStudy = { ...draftStudy, status: 'active' };
 
     // createServerSupabaseClient() is called twice in activateStudy (once inside

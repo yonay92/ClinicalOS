@@ -383,22 +383,56 @@ Permissions:
 
 - Admin
 
-### POST /api/studies/from-protocol
+### POST /api/studies/ai-drafts
 
-Uploads protocol and starts AI extraction.
+Uploads a protocol PDF and starts AI extraction into a temporary draft. **No `studies` row is
+created by this call** — the extraction lands in `study_drafts` for guided human review.
 
 Flow:
 
 1. Upload protocol file.
-2. Create study draft.
+2. Create `study_drafts` row (`status: 'processing'`).
 3. Run AI Protocol Agent.
-4. Create proposed Study Profile.
-5. Create proposed Visit Template.
-6. Return review payload.
+4. Store the extracted study profile, visit schedule, and confidence/uncertain-fields on the
+   draft (`status: 'ready'`, or `'failed'` with `error_message` if extraction errors out).
+5. Return the draft for the guided review screen.
+
+Permissions:
+
+- create_study
+
+### GET /api/studies/ai-drafts/:id
+
+Fetches an AI draft for review.
+
+Permissions:
+
+- create_study
+
+### DELETE /api/studies/ai-drafts/:id
+
+Discards an AI draft that hasn't been finalized yet.
+
+Permissions:
+
+- create_study
+
+### POST /api/studies/ai-drafts/:id/finalize
+
+Creates the real study from a (possibly edited) AI draft — validated by `finalizeAiDraftSchema`.
+Creates the `studies` row with every submitted field, creates the visit template if any visit
+items were submitted, attaches the originally uploaded protocol PDF under Documents
+(`study_documents`, `document_type: 'protocol'`), and marks the draft `finalized`.
+
+Permissions:
+
+- create_study
 
 ### POST /api/studies/:id/approve-ai-extraction
 
-Approves AI-generated study draft.
+Approves an AI-generated extraction on an **existing** study (protocol amendments — see
+`POST /api/studies/:id/protocol`). Not used by the ai-drafts flow above, which creates the study
+directly on finalize instead of an approve-per-extraction step.
 
 Permissions:
 

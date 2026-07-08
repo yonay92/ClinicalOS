@@ -12,6 +12,7 @@ import { UserService } from '@/services/users/UserService';
 import { SiteService } from '@/services/sites/SiteService';
 import { CompanyService } from '@/services/company/CompanyService';
 import { PermissionService } from '@/services/permissions/PermissionService';
+import { AIDraftService } from '@/services/studies/AIDraftService';
 import { NotFoundError } from '@/lib/api/errors';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -256,5 +257,47 @@ describe('PermissionService — company isolation', () => {
 
     const companyEq = eqCalls.find(([col]) => col === 'company_id');
     expect(companyEq![1]).toBe(COMPANY_A);
+  });
+});
+
+// ── AIDraftService ──────────────────────────────────────────────────────────
+
+describe('AIDraftService — company isolation', () => {
+  it('getDraft() scopes query to company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const draftRow = {
+      id: 'draft-1',
+      company_id: COMPANY_A,
+      file_id: 'file-1',
+      status: 'ready',
+      confidence: 0.9,
+      uncertain_fields: [],
+      extracted_profile: {},
+      extracted_visit_items: [],
+      extracted_extra: {},
+      error_message: null,
+      study_id: null,
+      created_by: USER_A,
+      created_at: '',
+      updated_at: '',
+    };
+    const { client, eqCalls } = makeTrackingClient(draftRow);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await AIDraftService.getDraft('draft-1', makeCtx(COMPANY_A));
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('getDraft() throws NotFoundError when the draft belongs to a different company', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client } = makeTrackingClient(null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      AIDraftService.getDraft('draft-other-company', makeCtx(COMPANY_A)),
+    ).rejects.toThrow(NotFoundError);
   });
 });

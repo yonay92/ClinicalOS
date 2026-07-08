@@ -7,7 +7,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 type ProtocolUploaderProps = {
   studyId?: string;
-  onUploaded: (result: { study?: { id: string }; extraction_id: string | null }) => void;
+  onUploaded: (result: { extraction_id?: string | null; draft?: { id: string } }) => void;
 };
 
 export function ProtocolUploader({ studyId, onUploaded }: ProtocolUploaderProps) {
@@ -23,11 +23,11 @@ export function ProtocolUploader({ studyId, onUploaded }: ProtocolUploaderProps)
       const formData = new FormData();
       formData.append('file', file);
 
-      const url = studyId ? `/api/studies/${studyId}/protocol` : '/api/studies/from-protocol';
+      const url = studyId ? `/api/studies/${studyId}/protocol` : '/api/studies/ai-drafts';
       const res = await fetch(url, { method: 'POST', body: formData });
       const json = (await res.json()) as {
         success: boolean;
-        data?: { study?: { id: string }; extraction_id: string | null };
+        data?: { extraction_id?: string | null; draft?: { id: string } };
         message?: string;
       };
 

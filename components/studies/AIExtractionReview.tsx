@@ -60,7 +60,8 @@ export function AIExtractionReview({
           {EXTRACTION_LABELS[extraction.extraction_type]}
         </h3>
         <Badge variant={confidenceVariant(extraction.confidence)}>
-          Confidence: {extraction.confidence !== null ? `${Math.round(extraction.confidence * 100)}%` : 'N/A'}
+          Confidence:{' '}
+          {extraction.confidence !== null ? `${Math.round(extraction.confidence * 100)}%` : 'N/A'}
         </Badge>
       </div>
 
@@ -74,7 +75,12 @@ export function AIExtractionReview({
         {extraction.approved ? (
           <Badge variant="success">Approved</Badge>
         ) : (
-          <Button size="sm" loading={approving} disabled={approving} onClick={() => void handleApprove()}>
+          <Button
+            size="sm"
+            loading={approving}
+            disabled={approving}
+            onClick={() => void handleApprove()}
+          >
             Approve
           </Button>
         )}

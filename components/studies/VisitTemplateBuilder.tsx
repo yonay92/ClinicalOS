@@ -9,128 +9,16 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { AlertBanner } from '@/components/ui/AlertBanner';
-import type { CreateVisitTemplateItemInput } from '@/types/studies';
+import {
+  SortableVisitItemRow,
+  emptyVisitItem,
+  type VisitItemDraft,
+} from '@/components/studies/VisitItemRow';
 
-type DraftItem = CreateVisitTemplateItemInput & { key: string };
-
-function makeKey() {
-  return Math.random().toString(36).slice(2);
-}
-
-function emptyItem(order: number): DraftItem {
-  return {
-    key: makeKey(),
-    visit_name: '',
-    visit_order: order,
-    offset_days: 0,
-    window_before: 0,
-    window_after: 0,
-    visit_type: 'scheduled',
-    is_required: true,
-    is_baseline: false,
-  };
-}
-
-function SortableRow({
-  item,
-  onChange,
-  onSetBaseline,
-  onRemove,
-}: {
-  item: DraftItem;
-  onChange: (key: string, patch: Partial<DraftItem>) => void;
-  onSetBaseline: (key: string) => void;
-  onRemove: (key: string) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: item.key,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3"
-    >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="cursor-grab text-gray-400 hover:text-gray-600"
-        aria-label="Reorder visit"
-      >
-        ⠿
-      </button>
-      <div className="flex-1">
-        <Input
-          value={item.visit_name}
-          onChange={(e) => onChange(item.key, { visit_name: e.target.value })}
-          placeholder="Visit name (e.g. Screening)"
-        />
-      </div>
-      <div className="w-24">
-        <Input
-          type="number"
-          value={item.offset_days ?? 0}
-          onChange={(e) => onChange(item.key, { offset_days: Number(e.target.value) })}
-          placeholder="Day offset"
-        />
-      </div>
-      <div className="w-20">
-        <Input
-          type="number"
-          value={item.window_before ?? 0}
-          onChange={(e) => onChange(item.key, { window_before: Number(e.target.value) })}
-          placeholder="-Window"
-        />
-      </div>
-      <div className="w-20">
-        <Input
-          type="number"
-          value={item.window_after ?? 0}
-          onChange={(e) => onChange(item.key, { window_after: Number(e.target.value) })}
-          placeholder="+Window"
-        />
-      </div>
-      <label className="flex items-center gap-1 text-xs text-gray-600">
-        <input
-          type="checkbox"
-          checked={item.is_required ?? true}
-          onChange={(e) => onChange(item.key, { is_required: e.target.checked })}
-        />
-        Required
-      </label>
-      <label className="flex items-center gap-1 text-xs text-gray-600">
-        <input
-          type="radio"
-          name="visit-template-baseline"
-          checked={item.is_baseline ?? false}
-          onChange={() => onSetBaseline(item.key)}
-        />
-        Baseline
-      </label>
-      <Button variant="ghost" size="sm" onClick={() => onRemove(item.key)}>
-        Remove
-      </Button>
-    </div>
-  );
-}
+type DraftItem = VisitItemDraft;
 
 export function VisitTemplateBuilder({
   studyId,
@@ -139,7 +27,7 @@ export function VisitTemplateBuilder({
   studyId: string;
   onSaved: () => void;
 }) {
-  const [items, setItems] = useState<DraftItem[]>([emptyItem(1)]);
+  const [items, setItems] = useState<DraftItem[]>([emptyVisitItem(1)]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -158,7 +46,7 @@ export function VisitTemplateBuilder({
   }
 
   function handleAdd() {
-    setItems((prev) => [...prev, emptyItem(prev.length + 1)]);
+    setItems((prev) => [...prev, emptyVisitItem(prev.length + 1)]);
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -198,7 +86,7 @@ export function VisitTemplateBuilder({
         return;
       }
       onSaved();
-      setItems([emptyItem(1)]);
+      setItems([emptyVisitItem(1)]);
     } catch {
       setError('An unexpected error occurred');
     } finally {
@@ -214,7 +102,7 @@ export function VisitTemplateBuilder({
         <SortableContext items={items.map((i) => i.key)} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
             {items.map((item) => (
-              <SortableRow
+              <SortableVisitItemRow
                 key={item.key}
                 item={item}
                 onChange={handleChange}
