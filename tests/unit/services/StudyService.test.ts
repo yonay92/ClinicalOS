@@ -489,3 +489,41 @@ describe('StudyService.approveAIExtraction', () => {
     );
   });
 });
+
+describe('StudyService.listCrcOptions', () => {
+  it('throws PermissionDeniedError when user lacks view_studies', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockRejectedValue(
+      new PermissionDeniedError('view_studies'),
+    );
+
+    await expect(StudyService.listCrcOptions(makeCtx())).rejects.toThrow(PermissionDeniedError);
+  });
+
+  it('returns distinct, sorted CRC options from active study_staff rows', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const staffRows = [
+      { user_id: 'user-2', profiles: { full_name: 'Bob CRC' } },
+      { user_id: 'user-1', profiles: { full_name: 'Alice CRC' } },
+      { user_id: 'user-2', profiles: { full_name: 'Bob CRC' } },
+    ];
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
+      makeSupabaseClient({ data: staffRows }),
+    );
+
+    const result = await StudyService.listCrcOptions(makeCtx());
+
+    expect(result).toEqual([
+      { user_id: 'user-1', full_name: 'Alice CRC' },
+      { user_id: 'user-2', full_name: 'Bob CRC' },
+    ]);
+  });
+
+  it('returns an empty array when there are no active CRC assignments', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(makeSupabaseClient({ data: [] }));
+
+    const result = await StudyService.listCrcOptions(makeCtx());
+    expect(result).toEqual([]);
+  });
+});

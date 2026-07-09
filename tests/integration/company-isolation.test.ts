@@ -13,6 +13,7 @@ import { SiteService } from '@/services/sites/SiteService';
 import { CompanyService } from '@/services/company/CompanyService';
 import { PermissionService } from '@/services/permissions/PermissionService';
 import { AIDraftService } from '@/services/studies/AIDraftService';
+import { SubjectService } from '@/services/subjects/SubjectService';
 import { NotFoundError } from '@/lib/api/errors';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -257,6 +258,72 @@ describe('PermissionService — company isolation', () => {
 
     const companyEq = eqCalls.find(([col]) => col === 'company_id');
     expect(companyEq![1]).toBe(COMPANY_A);
+  });
+});
+
+// ── SubjectService ──────────────────────────────────────────────────────────
+
+describe('SubjectService — company isolation', () => {
+  it('list() always filters by company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await SubjectService.list({}, makeCtx(COMPANY_A));
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('list() uses context company_id, not a client-supplied one', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await SubjectService.list({}, makeCtx(COMPANY_B));
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq![1]).toBe(COMPANY_B);
+    expect(companyEq![1]).not.toBe(COMPANY_A);
+  });
+
+  it('getById() scopes query to company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const subjectRow = {
+      id: 'subject-1',
+      company_id: COMPANY_A,
+      site_id: 'site-1',
+      study_id: 'study-1',
+      subject_number: '001-001',
+      initials: null,
+      status: 'pre_screening',
+      screening_date: null,
+      baseline_date: null,
+      randomization_date: null,
+      randomization_number: null,
+      end_of_study_date: null,
+      created_by: null,
+      created_at: '',
+      updated_at: '',
+    };
+    const { client, eqCalls } = makeTrackingClient(subjectRow);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await SubjectService.getById('subject-1', makeCtx(COMPANY_A));
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('getById() throws NotFoundError when the subject belongs to a different company', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client } = makeTrackingClient(null, null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      SubjectService.getById('subject-other-company', makeCtx(COMPANY_A)),
+    ).rejects.toThrow(NotFoundError);
   });
 });
 

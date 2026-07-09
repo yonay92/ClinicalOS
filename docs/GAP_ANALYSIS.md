@@ -442,13 +442,15 @@ CREATE INDEX idx_audit_logs_module ON audit_logs(module);
 
 ## 8. Performance Concerns
 
-### GAP-PERF-01: N+1 query risk in Subject Profile
+### GAP-PERF-01: N+1 query risk in Subject Profile — RESOLVED (Sprint 3)
 
 **Impact:** HIGH
 
 **Source:** `GET /api/subjects/:id` returns "overview, visits, charts, timeline, notes, documents, history." A naive implementation would make separate queries for each tab.
 
 **Recommendation:** Use Supabase's `select()` with nested relations to fetch all related data in one query per section. Implement lazy loading per tab (fetch tab data only when the tab is opened).
+
+**Resolution:** Notes/Documents/History/Timeline are served by dedicated endpoints (`/api/subjects/[id]/notes`, `/documents`, `/history`, `/timeline`) fetched only when their tab is opened in `app/(app)/subjects/[id]/page.tsx`; the Overview tab's base `GET /api/subjects/:id` returns only the `subjects` row itself. No N+1 pattern exists.
 
 ---
 
@@ -472,19 +474,23 @@ CREATE INDEX idx_audit_logs_module ON audit_logs(module);
 
 ---
 
-### GAP-REQ-02: No subject number uniqueness scope defined
+### GAP-REQ-02: No subject number uniqueness scope defined — RESOLVED (Sprint 3)
 
 **Source:** `subject_number` is defined as `text not null` without a unique constraint. Clinical trials require unique subject numbers per study.
 
 **Recommendation:** Add: `UNIQUE(study_id, site_id, subject_number)` or `UNIQUE(study_id, subject_number)` depending on whether subject numbers are study-wide or site-specific. Verify with domain experts. Default recommendation: `UNIQUE(study_id, subject_number)`.
 
+**Resolution:** `uq_subjects_study_number UNIQUE (study_id, subject_number)` added in `supabase/migrations/004_subjects.sql`, matching the default recommendation. `SubjectService.create` maps the resulting Postgres `23505` violation to `DuplicateRecordError`.
+
 ---
 
-### GAP-REQ-03: No defined behavior when visit template is not yet approved
+### GAP-REQ-03: No defined behavior when visit template is not yet approved — RESOLVED (Sprint 3)
 
 **Source:** BUSINESS_RULES_03 says subject creation generates a visit schedule. But what if no approved visit template exists for the study?
 
 **Recommendation:** Block subject creation if no approved visit template exists. Display a clear error: "This study does not have an approved visit template. Please approve a visit template before creating subjects." Add this as a validation rule in `SubjectService`.
+
+**Resolution:** `SubjectService.create` calls `VisitTemplateService.hasApprovedTemplate` and throws a `BusinessRuleError` with exactly this message before inserting the subject row.
 
 ---
 

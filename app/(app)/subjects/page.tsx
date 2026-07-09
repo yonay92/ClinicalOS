@@ -11,7 +11,7 @@ import { AlertBanner } from '@/components/ui/AlertBanner';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { Subject, SubjectStatus } from '@/types/subjects';
-import type { Study } from '@/types/studies';
+import type { Study, CrcOption } from '@/types/studies';
 import type { Site } from '@/types/sites';
 
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'default' | 'primary' | 'info';
@@ -42,22 +42,26 @@ export default function SubjectsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [studies, setStudies] = useState<Study[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [crcOptions, setCrcOptions] = useState<CrcOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [studyFilter, setStudyFilter] = useState('');
   const [siteFilter, setSiteFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [subjectNumberFilter, setSubjectNumberFilter] = useState('');
+  const [searchFilter, setSearchFilter] = useState('');
+  const [assignedCrcFilter, setAssignedCrcFilter] = useState('');
 
   useEffect(() => {
     void (async () => {
-      const [studiesRes, sitesRes] = await Promise.all([
+      const [studiesRes, sitesRes, crcRes] = await Promise.all([
         fetch('/api/studies'),
         fetch('/api/sites'),
+        fetch('/api/studies/crc-options'),
       ]);
       if (studiesRes.ok) setStudies(((await studiesRes.json()) as { data: Study[] }).data);
       if (sitesRes.ok) setSites(((await sitesRes.json()) as { data: Site[] }).data);
+      if (crcRes.ok) setCrcOptions(((await crcRes.json()) as { data: CrcOption[] }).data);
     })();
   }, []);
 
@@ -69,7 +73,8 @@ export default function SubjectsPage() {
       if (studyFilter) params.set('study_id', studyFilter);
       if (siteFilter) params.set('site_id', siteFilter);
       if (statusFilter) params.set('status', statusFilter);
-      if (subjectNumberFilter) params.set('subject_number', subjectNumberFilter);
+      if (searchFilter) params.set('search', searchFilter);
+      if (assignedCrcFilter) params.set('assigned_crc', assignedCrcFilter);
 
       const res = await fetch(`/api/subjects?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load subjects');
@@ -80,7 +85,7 @@ export default function SubjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [studyFilter, siteFilter, statusFilter, subjectNumberFilter]);
+  }, [studyFilter, siteFilter, statusFilter, searchFilter, assignedCrcFilter]);
 
   useEffect(() => {
     void fetchSubjects();
@@ -101,7 +106,12 @@ export default function SubjectsPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-4 gap-3">
+      <div className="mb-4 grid grid-cols-5 gap-3">
+        <Input
+          placeholder="Search subject # or initials"
+          value={searchFilter}
+          onChange={(e) => setSearchFilter(e.target.value)}
+        />
         <Select
           value={studyFilter}
           onChange={(e) => setStudyFilter(e.target.value)}
@@ -120,10 +130,11 @@ export default function SubjectsPage() {
           placeholder="All statuses"
           options={STATUS_OPTIONS}
         />
-        <Input
-          placeholder="Subject number"
-          value={subjectNumberFilter}
-          onChange={(e) => setSubjectNumberFilter(e.target.value)}
+        <Select
+          value={assignedCrcFilter}
+          onChange={(e) => setAssignedCrcFilter(e.target.value)}
+          placeholder="Assigned CRC"
+          options={crcOptions.map((c) => ({ value: c.user_id, label: c.full_name }))}
         />
       </div>
 

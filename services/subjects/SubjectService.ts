@@ -43,6 +43,13 @@ export type SubjectListFilters = {
   site_id?: string | undefined;
   status?: SubjectStatus | undefined;
   subject_number?: string | undefined;
+  // Free-text search across subject_number and initials.
+  search?: string | undefined;
+  // A user_id — resolved via study_staff (staff_role = 'crc') rather than a
+  // direct ownership column. Subjects are not assigned to a fixed CRC
+  // (docs/DATABASE_Part_03_Subjects_Visits_Calendar.md); this filters to
+  // subjects whose study currently has that user as an active CRC.
+  assigned_crc?: string | undefined;
 };
 
 // BUSINESS_RULES_03: Pre-Screening -> Screening -> Randomized -> Active -> Completed,
@@ -97,6 +104,28 @@ export const SubjectService = {
     if (filters.status) query = query.eq('status', filters.status);
     if (filters.subject_number)
       query = query.ilike('subject_number', `%${filters.subject_number}%`);
+    if (filters.search) {
+      const escaped = filters.search.replace(/[%,()]/g, '');
+      query = query.or(`subject_number.ilike.%${escaped}%,initials.ilike.%${escaped}%`);
+    }
+
+    if (filters.assigned_crc) {
+      const { data: staffRows } = await supabase
+        .from('study_staff')
+        .select('study_id')
+        .eq('company_id', ctx.company.id)
+        .eq('user_id', filters.assigned_crc)
+        .eq('staff_role', 'crc')
+        .eq('active', true);
+
+      const studyIds = [
+        ...new Set(
+          ((staffRows as Array<{ study_id: string }> | null) ?? []).map((r) => r.study_id),
+        ),
+      ];
+      if (studyIds.length === 0) return [];
+      query = query.in('study_id', studyIds);
+    }
 
     const { data } = await query.order('created_at', { ascending: false });
     return (data as Subject[]) ?? [];

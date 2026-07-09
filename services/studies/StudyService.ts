@@ -15,6 +15,7 @@ import type {
   StudyAssignedSite,
   StudyAiExtraction,
   FileRecord,
+  CrcOption,
 } from '@/types/studies';
 import type { RequestContext } from '@/types/api';
 
@@ -390,6 +391,29 @@ export const StudyService = {
       site_code: row.sites.site_code,
       status: row.status,
     }));
+  },
+
+  // Company-wide list of active CRC study staff, for filter dropdowns (e.g. Subject
+  // List "Assigned CRC"). study_staff has no read path anywhere else yet.
+  async listCrcOptions(ctx: RequestContext): Promise<CrcOption[]> {
+    await PermissionService.requirePermission(ctx.user.id, 'view_studies');
+
+    const supabase = await createServerSupabaseClient();
+    const { data } = await supabase
+      .from('study_staff')
+      .select('user_id, profiles!inner(full_name)')
+      .eq('company_id', ctx.company.id)
+      .eq('staff_role', 'crc')
+      .eq('active', true);
+
+    type Row = { user_id: string; profiles: { full_name: string } };
+    const seen = new Map<string, CrcOption>();
+    for (const row of (data as Row[] | null) ?? []) {
+      if (!seen.has(row.user_id)) {
+        seen.set(row.user_id, { user_id: row.user_id, full_name: row.profiles.full_name });
+      }
+    }
+    return [...seen.values()].sort((a, b) => a.full_name.localeCompare(b.full_name));
   },
 
   async unassignSite(studyId: string, siteId: string, ctx: RequestContext): Promise<void> {

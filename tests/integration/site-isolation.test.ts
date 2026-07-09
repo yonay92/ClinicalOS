@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { SiteService } from '@/services/sites/SiteService';
 import { PermissionService } from '@/services/permissions/PermissionService';
+import { SubjectService } from '@/services/subjects/SubjectService';
 import { PermissionDeniedError, NotFoundError } from '@/lib/api/errors';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -221,6 +222,34 @@ describe('PermissionService.canAccessSite()', () => {
     await expect(PermissionService.requireSiteAccess(USER_ID, SITE_B)).rejects.toThrow(
       PermissionDeniedError,
     );
+  });
+});
+
+// ── SubjectService.create — site access enforcement ────────────────────────
+
+describe('SubjectService.create() — site access enforcement', () => {
+  const input = { site_id: SITE_B, study_id: 'study-uuid', subject_number: '001-001' };
+
+  it('throws PermissionDeniedError when the user lacks access to the target site', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    vi.spyOn(PermissionService, 'requireSiteAccess').mockRejectedValue(
+      new PermissionDeniedError('site_access'),
+    );
+
+    await expect(SubjectService.create(input, makeCtx())).rejects.toThrow(PermissionDeniedError);
+  });
+
+  it('checks site access for the exact site_id supplied, not an implicit default', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const requireSiteAccessSpy = vi
+      .spyOn(PermissionService, 'requireSiteAccess')
+      .mockResolvedValue(undefined);
+    // Study lookup returns nothing — creation still fails downstream, but the
+    // site-access check must have already run with the right site_id.
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(makeSingleClient(null));
+
+    await expect(SubjectService.create(input, makeCtx())).rejects.toThrow(NotFoundError);
+    expect(requireSiteAccessSpy).toHaveBeenCalledWith(USER_ID, SITE_B);
   });
 });
 

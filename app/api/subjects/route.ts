@@ -22,6 +22,8 @@ export async function GET(request: NextRequest) {
     site_id: searchParams.get('site_id') ?? undefined,
     status: (searchParams.get('status') as SubjectStatus | null) ?? undefined,
     subject_number: searchParams.get('subject_number') ?? undefined,
+    search: searchParams.get('search') ?? undefined,
+    assigned_crc: searchParams.get('assigned_crc') ?? undefined,
   };
 
   try {

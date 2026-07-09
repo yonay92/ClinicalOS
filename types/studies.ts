@@ -67,6 +67,11 @@ export type StudyAssignedSite = {
 export type StudyStaffRole =
   'pi' | 'sub_i' | 'crc' | 'data_entry' | 'regulatory' | 'site_director' | 'other';
 
+export type CrcOption = {
+  user_id: string;
+  full_name: string;
+};
+
 export type StudyStaff = {
   id: string;
   company_id: string;

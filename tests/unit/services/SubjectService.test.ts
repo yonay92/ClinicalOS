@@ -59,6 +59,7 @@ function queryStub(data: unknown, error: unknown = null) {
   const stub: Record<string, unknown> = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
@@ -71,7 +72,7 @@ function queryStub(data: unknown, error: unknown = null) {
     catch: resolved.catch.bind(resolved),
     finally: resolved.finally.bind(resolved),
   };
-  for (const key of ['select', 'eq', 'order', 'limit', 'insert', 'update', 'upsert', 'in']) {
+  for (const key of ['select', 'eq', 'or', 'order', 'limit', 'insert', 'update', 'upsert', 'in']) {
     (stub[key] as ReturnType<typeof vi.fn>).mockReturnValue(stub);
   }
   return stub;
@@ -485,5 +486,80 @@ describe('SubjectService.updateStatus', () => {
     const result = await SubjectService.updateStatus(SUBJECT_ID, 'completed', makeCtx());
 
     expect(result.status).toBe('completed');
+  });
+});
+
+describe('SubjectService.list', () => {
+  it('throws PermissionDeniedError when user lacks view_subjects', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockRejectedValue(
+      new PermissionDeniedError('view_subjects'),
+    );
+
+    await expect(SubjectService.list({}, makeCtx())).rejects.toThrow(PermissionDeniedError);
+  });
+
+  it('applies a combined search filter across subject_number and initials', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const rows = [{ id: SUBJECT_ID, subject_number: '001-001', initials: 'AB' }];
+    const client = makeSupabaseClient({ data: rows });
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    const result = await SubjectService.list({ search: 'AB' }, makeCtx());
+
+    expect(result).toHaveLength(1);
+    const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
+    const subjectsStub = fromMock.mock.results[0]?.value as { or: ReturnType<typeof vi.fn> };
+    expect(subjectsStub.or).toHaveBeenCalledWith(
+      expect.stringContaining('subject_number.ilike.%AB%'),
+    );
+  });
+
+  it('resolves assigned_crc via study_staff before returning subjects', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const subjectRows = [{ id: SUBJECT_ID, subject_number: '001-001', study_id: STUDY_ID }];
+    const staffRows = [{ study_id: STUDY_ID }];
+    // 1st .from() builds the `subjects` query chain (resolved last, via .order());
+    // 2nd .from() is the study_staff lookup, awaited directly inside the filter branch.
+    const client = makeSupabaseClient({ data: subjectRows }, { data: staffRows });
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    const result = await SubjectService.list({ assigned_crc: USER_ID }, makeCtx());
+
+    expect(result).toHaveLength(1);
+    const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
+    expect(fromMock).toHaveBeenNthCalledWith(1, 'subjects');
+    expect(fromMock).toHaveBeenNthCalledWith(2, 'study_staff');
+  });
+
+  it('short-circuits to an empty array when the CRC has no active study assignments', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const client = makeSupabaseClient({ data: null }, { data: [] });
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    const result = await SubjectService.list({ assigned_crc: USER_ID }, makeCtx());
+    expect(result).toEqual([]);
+  });
+});
+
+describe('SubjectService.getById', () => {
+  it('throws PermissionDeniedError when user lacks view_subjects', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockRejectedValue(
+      new PermissionDeniedError('view_subjects'),
+    );
+
+    await expect(SubjectService.getById(SUBJECT_ID, makeCtx())).rejects.toThrow(
+      PermissionDeniedError,
+    );
+  });
+
+  it('throws NotFoundError when the subject does not belong to the caller company', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const client = makeSupabaseClient({ data: null });
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(SubjectService.getById(SUBJECT_ID, makeCtx())).rejects.toThrow(NotFoundError);
   });
 });
