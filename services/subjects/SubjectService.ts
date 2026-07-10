@@ -2,7 +2,6 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { PermissionService } from '@/services/permissions/PermissionService';
 import { AuditService } from '@/services/audit/AuditService';
 import { NotificationService } from '@/services/notifications/NotificationService';
-import { VisitTemplateService } from '@/services/visit-templates/VisitTemplateService';
 import { getVisitLockStatus, sortVisitsByOrder } from '@/lib/utils/visitSequencing';
 import {
   NotFoundError,
@@ -156,36 +155,45 @@ export const SubjectService = {
 
     const supabase = await createServerSupabaseClient();
 
-    const { data: study } = await supabase
-      .from('studies')
-      .select('id, status')
-      .eq('id', input.study_id)
-      .eq('company_id', ctx.company.id)
-      .maybeSingle();
+    // Study/site-assignment/approved-template are three independent reads — none
+    // depends on another's result, so they run concurrently instead of as three
+    // sequential round trips. Validation below still evaluates them in the same
+    // precedence as before (study, then site, then template), so the error a
+    // caller sees for an invalid combination is unchanged.
+    const [{ data: study }, { data: studySite }, { data: template }] = await Promise.all([
+      supabase
+        .from('studies')
+        .select('id, status')
+        .eq('id', input.study_id)
+        .eq('company_id', ctx.company.id)
+        .maybeSingle(),
+      supabase
+        .from('study_sites')
+        .select('id')
+        .eq('study_id', input.study_id)
+        .eq('site_id', input.site_id)
+        .eq('company_id', ctx.company.id)
+        .maybeSingle(),
+      // GAP-REQ-03: block creation until the study has an approved visit template.
+      // Fetched once here and reused below for the item lookup — avoids re-querying
+      // visit_templates with the identical filter a second time.
+      supabase
+        .from('visit_templates')
+        .select('id')
+        .eq('study_id', input.study_id)
+        .eq('company_id', ctx.company.id)
+        .eq('status', 'approved')
+        .maybeSingle(),
+    ]);
 
     if (!study) throw new NotFoundError('Study');
     if ((study as { status: string }).status !== 'active') {
       throw new BusinessRuleError('Subjects can only be created for an active study');
     }
-
-    const { data: studySite } = await supabase
-      .from('study_sites')
-      .select('id')
-      .eq('study_id', input.study_id)
-      .eq('site_id', input.site_id)
-      .eq('company_id', ctx.company.id)
-      .maybeSingle();
-
     if (!studySite) {
       throw new BusinessRuleError('The selected site is not assigned to this study');
     }
-
-    // GAP-REQ-03: block creation until the study has an approved visit template.
-    const hasApprovedTemplate = await VisitTemplateService.hasApprovedTemplate(
-      input.study_id,
-      ctx.company.id,
-    );
-    if (!hasApprovedTemplate) {
+    if (!template) {
       throw new BusinessRuleError(
         'This study does not have an approved visit template. Please approve a visit template before creating subjects.',
       );
@@ -231,64 +239,54 @@ export const SubjectService = {
     // scheduled for the template's designated Baseline item now, and completing it
     // (SubjectService.completeBaselineVisit) records baseline_date and generates the
     // rest of the protocol schedule anchored to that date.
-    const { data: template } = await supabase
-      .from('visit_templates')
-      .select('id')
-      .eq('study_id', subject.study_id)
-      .eq('company_id', ctx.company.id)
-      .eq('status', 'approved')
-      .maybeSingle();
+    const { data: items } = await supabase
+      .from('visit_template_items')
+      .select(TEMPLATE_ITEM_COLUMNS)
+      .eq('template_id', (template as { id: string }).id)
+      .order('visit_order');
 
-    if (template) {
-      const { data: items } = await supabase
-        .from('visit_template_items')
-        .select(TEMPLATE_ITEM_COLUMNS)
-        .eq('template_id', (template as { id: string }).id)
-        .order('visit_order');
+    const allItems = (items as VisitTemplateItem[]) ?? [];
+    const baselineItem = allItems.find((i) => i.is_baseline);
 
-      const allItems = (items as VisitTemplateItem[]) ?? [];
-      const baselineItem = allItems.find((i) => i.is_baseline);
-
-      if (!baselineItem) {
-        throw new BusinessRuleError(
-          "This study's approved visit template has no Baseline visit configured",
-        );
-      }
-
-      // Everything up to and including Baseline is created now — items ordered before
-      // Baseline (e.g. Screening) need to exist as real, completable rows so the
-      // out-of-sequence lock has something to check Baseline against. Everything after
-      // Baseline is still unanchored (no baseline_date yet) and is generated once
-      // Baseline is completed (generateVisitSchedule).
-      const initialItems = allItems.filter((i) => i.visit_order <= baselineItem.visit_order);
-
-      const { error: visitError } = await supabase.from('visits').insert(
-        initialItems.map((item) => ({
-          company_id: ctx.company.id,
-          site_id: subject.site_id,
-          study_id: subject.study_id,
-          subject_id: subject.id,
-          visit_template_item_id: item.id,
-          visit_name: item.visit_name,
-          visit_type: item.visit_type,
-          target_date: null,
-          window_start: null,
-          window_end: null,
-          status: 'scheduled',
-          created_by: ctx.user.id,
-        })),
-      );
-      if (visitError) throw new DatabaseError(visitError.message);
-
-      await this.addTimelineEvent(
-        subject.id,
-        ctx.company.id,
-        'baseline_visit_scheduled',
-        new Date().toISOString(),
-        `${initialItems.length} visit(s) scheduled through Baseline — pending completion`,
-        ctx.user.id,
+    if (!baselineItem) {
+      throw new BusinessRuleError(
+        "This study's approved visit template has no Baseline visit configured",
       );
     }
+
+    // Everything up to and including Baseline is created now — items ordered before
+    // Baseline (e.g. Screening) need to exist as real, completable rows so the
+    // out-of-sequence lock has something to check Baseline against. Everything after
+    // Baseline is still unanchored (no baseline_date yet) and is generated once
+    // Baseline is completed (generateVisitSchedule).
+    const initialItems = allItems.filter((i) => i.visit_order <= baselineItem.visit_order);
+
+    const { error: visitError } = await supabase.from('visits').insert(
+      initialItems.map((item) => ({
+        company_id: ctx.company.id,
+        site_id: subject.site_id,
+        study_id: subject.study_id,
+        subject_id: subject.id,
+        visit_template_item_id: item.id,
+        visit_name: item.visit_name,
+        visit_type: item.visit_type,
+        target_date: null,
+        window_start: null,
+        window_end: null,
+        status: 'scheduled',
+        created_by: ctx.user.id,
+      })),
+    );
+    if (visitError) throw new DatabaseError(visitError.message);
+
+    await this.addTimelineEvent(
+      subject.id,
+      ctx.company.id,
+      'baseline_visit_scheduled',
+      new Date().toISOString(),
+      `${initialItems.length} visit(s) scheduled through Baseline — pending completion`,
+      ctx.user.id,
+    );
 
     await AuditService.log({
       company_id: ctx.company.id,
@@ -993,9 +991,22 @@ export const SubjectService = {
 
   async listVisits(subjectId: string, ctx: RequestContext): Promise<Visit[]> {
     await PermissionService.requireAnyPermission(ctx.user.id, ['view_subjects', 'view_visits']);
-    const subject = await this.getById(subjectId, ctx);
 
+    // Fetch the subject row directly rather than via getById(), which would
+    // redundantly re-check requirePermission('view_subjects') — already covered by
+    // the requireAnyPermission call above (and getById()'s narrower check would
+    // incorrectly reject a caller who only holds view_visits).
     const supabase = await createServerSupabaseClient();
+    const { data: subjectRow, error: subjectError } = await supabase
+      .from('subjects')
+      .select(SUBJECT_COLUMNS)
+      .eq('id', subjectId)
+      .eq('company_id', ctx.company.id)
+      .single();
+
+    if (subjectError || !subjectRow) throw new NotFoundError('Subject');
+    const subject = subjectRow as Subject;
+
     const { data } = await supabase
       .from('visits')
       .select(VISIT_COLUMNS)

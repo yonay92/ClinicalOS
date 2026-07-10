@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { SubjectService } from '@/services/subjects/SubjectService';
 import { PermissionService } from '@/services/permissions/PermissionService';
-import { VisitTemplateService } from '@/services/visit-templates/VisitTemplateService';
 import { AuditService } from '@/services/audit/AuditService';
 import { NotificationService } from '@/services/notifications/NotificationService';
 import { PermissionDeniedError, BusinessRuleError, NotFoundError } from '@/lib/api/errors';
@@ -13,12 +12,6 @@ vi.mock('@/services/audit/AuditService', () => ({
 
 vi.mock('@/services/notifications/NotificationService', () => ({
   NotificationService: { dispatch: vi.fn() },
-}));
-
-vi.mock('@/services/visit-templates/VisitTemplateService', () => ({
-  VisitTemplateService: {
-    hasApprovedTemplate: vi.fn(),
-  },
 }));
 
 const COMPANY_ID = 'company-uuid';
@@ -105,10 +98,15 @@ describe('SubjectService.create', () => {
     vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
     vi.spyOn(PermissionService, 'requireSiteAccess').mockResolvedValue(undefined);
 
+    // Study/site/template are fetched concurrently (Promise.all), so all three
+    // queries fire even though only the study result determines the thrown error.
     const draftStudy = { id: STUDY_ID, status: 'draft' };
-    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
-      makeSupabaseClient({ data: draftStudy }),
+    const client = makeSupabaseClient(
+      { data: draftStudy }, // studies lookup
+      { data: { id: 'study-site-uuid' } }, // study_sites lookup
+      { data: { id: 'template-uuid' } }, // visit_templates lookup
     );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
 
     await expect(SubjectService.create(input, makeCtx())).rejects.toThrow(BusinessRuleError);
   });
@@ -118,7 +116,11 @@ describe('SubjectService.create', () => {
     vi.spyOn(PermissionService, 'requireSiteAccess').mockResolvedValue(undefined);
 
     const activeStudy = { id: STUDY_ID, status: 'active' };
-    const client = makeSupabaseClient({ data: activeStudy }, { data: null });
+    const client = makeSupabaseClient(
+      { data: activeStudy }, // studies lookup
+      { data: null }, // study_sites lookup — not assigned
+      { data: { id: 'template-uuid' } }, // visit_templates lookup
+    );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
 
     await expect(SubjectService.create(input, makeCtx())).rejects.toThrow(BusinessRuleError);
@@ -127,11 +129,14 @@ describe('SubjectService.create', () => {
   it('throws BusinessRuleError when the study has no approved visit template (GAP-REQ-03)', async () => {
     vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
     vi.spyOn(PermissionService, 'requireSiteAccess').mockResolvedValue(undefined);
-    vi.mocked(VisitTemplateService.hasApprovedTemplate).mockResolvedValue(false);
 
     const activeStudy = { id: STUDY_ID, status: 'active' };
     const studySite = { id: 'study-site-uuid' };
-    const client = makeSupabaseClient({ data: activeStudy }, { data: studySite });
+    const client = makeSupabaseClient(
+      { data: activeStudy }, // studies lookup
+      { data: studySite }, // study_sites lookup
+      { data: null }, // visit_templates lookup — no approved template
+    );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
 
     await expect(SubjectService.create(input, makeCtx())).rejects.toThrow(BusinessRuleError);
@@ -140,7 +145,6 @@ describe('SubjectService.create', () => {
   it('creates the subject and writes an audit log + timeline event when permitted', async () => {
     vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
     vi.spyOn(PermissionService, 'requireSiteAccess').mockResolvedValue(undefined);
-    vi.mocked(VisitTemplateService.hasApprovedTemplate).mockResolvedValue(true);
 
     const activeStudy = { id: STUDY_ID, status: 'active' };
     const studySite = { id: 'study-site-uuid' };
@@ -194,9 +198,9 @@ describe('SubjectService.create', () => {
     const client = makeSupabaseClient(
       { data: activeStudy }, // studies lookup
       { data: studySite }, // study_sites lookup
+      { data: template }, // visit_templates lookup (GAP-REQ-03 check, reused for items below)
       { data: subjectRow }, // subjects insert
       { data: null }, // subject_timeline insert (subject_created)
-      { data: template }, // visit_templates lookup
       { data: [screeningItem, baselineItem, week4Item] }, // visit_template_items (all, ordered)
       { data: null }, // visits insert (Screening + Baseline placeholders)
       { data: null }, // subject_timeline insert (baseline_visit_scheduled)

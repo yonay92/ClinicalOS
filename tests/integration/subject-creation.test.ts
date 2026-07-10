@@ -9,16 +9,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { SubjectService } from '@/services/subjects/SubjectService';
-import { VisitTemplateService } from '@/services/visit-templates/VisitTemplateService';
 import { PermissionService } from '@/services/permissions/PermissionService';
 import { NotFoundError, BusinessRuleError } from '@/lib/api/errors';
 
 vi.mock('@/services/audit/AuditService', () => ({ AuditService: { log: vi.fn() } }));
 vi.mock('@/services/notifications/NotificationService', () => ({
   NotificationService: { dispatch: vi.fn() },
-}));
-vi.mock('@/services/visit-templates/VisitTemplateService', () => ({
-  VisitTemplateService: { hasApprovedTemplate: vi.fn() },
 }));
 
 const COMPANY_A = 'company-a-uuid';
@@ -126,11 +122,14 @@ describe('Approved visit template gate blocks subject creation (GAP-REQ-03)', ()
   it('a subject cannot be created when the study has no approved visit template', async () => {
     vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
     vi.spyOn(PermissionService, 'requireSiteAccess').mockResolvedValue(undefined);
-    vi.spyOn(VisitTemplateService, 'hasApprovedTemplate').mockResolvedValue(false);
 
     const activeStudy = { id: STUDY_ID, status: 'active' };
     const studySite = { id: 'study-site-uuid' };
-    const client = makeSupabaseClient({ data: activeStudy }, { data: studySite });
+    const client = makeSupabaseClient(
+      { data: activeStudy }, // studies lookup
+      { data: studySite }, // study_sites lookup
+      { data: null }, // visit_templates lookup — no approved template
+    );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
 
     await expect(SubjectService.create(input, makeCtx(COMPANY_A))).rejects.toThrow(
@@ -141,7 +140,6 @@ describe('Approved visit template gate blocks subject creation (GAP-REQ-03)', ()
   it('creation succeeds once the study has an approved visit template', async () => {
     vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
     vi.spyOn(PermissionService, 'requireSiteAccess').mockResolvedValue(undefined);
-    vi.spyOn(VisitTemplateService, 'hasApprovedTemplate').mockResolvedValue(true);
 
     const activeStudy = { id: STUDY_ID, status: 'active' };
     const studySite = { id: 'study-site-uuid' };
@@ -169,11 +167,11 @@ describe('Approved visit template gate blocks subject creation (GAP-REQ-03)', ()
     };
 
     const client = makeSupabaseClient(
-      { data: activeStudy },
-      { data: studySite },
-      { data: subjectRow },
+      { data: activeStudy }, // studies lookup
+      { data: studySite }, // study_sites lookup
+      { data: template }, // visit_templates lookup (GAP-REQ-03 check, reused for items below)
+      { data: subjectRow }, // subjects insert
       { data: null }, // subject_timeline insert (subject_created)
-      { data: template }, // visit_templates lookup
       { data: [baselineItem] }, // visit_template_items (all, ordered)
       { data: null }, // visits insert (Baseline placeholder)
       { data: null }, // subject_timeline insert (baseline_visit_scheduled)
