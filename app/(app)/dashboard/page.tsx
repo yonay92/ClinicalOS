@@ -1,12 +1,16 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { countActiveStudies, countEnrolledSubjects } from '@/lib/utils/dashboardStats';
+import type { Study } from '@/types/studies';
+import type { Subject } from '@/types/subjects';
 
 type StatCardProps = {
   label: string;
   value: string | number;
-  description?: string;
+  description?: string | undefined;
 };
 
 function StatCard({ label, value, description }: StatCardProps) {
@@ -19,8 +23,49 @@ function StatCard({ label, value, description }: StatCardProps) {
   );
 }
 
+function useDashboardSummary() {
+  const [activeStudies, setActiveStudies] = useState<number | null>(null);
+  const [enrolledSubjects, setEnrolledSubjects] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const [studiesRes, subjectsRes] = await Promise.all([
+          fetch('/api/studies?status=active'),
+          fetch('/api/subjects'),
+        ]);
+        if (!studiesRes.ok || !subjectsRes.ok) throw new Error('Failed to load dashboard summary');
+
+        const studiesJson = (await studiesRes.json()) as { data: Study[] };
+        const subjectsJson = (await subjectsRes.json()) as { data: Subject[] };
+        if (cancelled) return;
+
+        setActiveStudies(countActiveStudies(studiesJson.data));
+        setEnrolledSubjects(countEnrolledSubjects(subjectsJson.data));
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { activeStudies, enrolledSubjects, loading, error };
+}
+
 export default function DashboardPage() {
   const auth = useAuth();
+  const summary = useDashboardSummary();
 
   if (auth.status === 'loading') {
     return (
@@ -36,6 +81,14 @@ export default function DashboardPage() {
 
   const { profile, company } = auth;
 
+  const studiesValue = summary.loading || summary.error ? '—' : (summary.activeStudies ?? 0);
+  const subjectsValue = summary.loading || summary.error ? '—' : (summary.enrolledSubjects ?? 0);
+  const summaryDescription = summary.loading
+    ? 'Loading…'
+    : summary.error
+      ? 'Failed to load'
+      : undefined;
+
   return (
     <div className="space-y-6">
       <div>
@@ -46,10 +99,14 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Active Studies" value="—" description="Loading..." />
-        <StatCard label="Enrolled Subjects" value="—" description="Loading..." />
-        <StatCard label="Open Tasks" value="—" description="Loading..." />
-        <StatCard label="Pending Documents" value="—" description="Loading..." />
+        <StatCard label="Active Studies" value={studiesValue} description={summaryDescription} />
+        <StatCard
+          label="Enrolled Subjects"
+          value={subjectsValue}
+          description={summaryDescription}
+        />
+        <StatCard label="Open Tasks" value="—" description="Coming in a future sprint" />
+        <StatCard label="Pending Documents" value="—" description="Coming in a future sprint" />
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-6">
