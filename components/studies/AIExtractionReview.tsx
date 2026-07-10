@@ -40,9 +40,13 @@ export function AIExtractionReview({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ extraction_id: extraction.id }),
       });
-      const json = (await res.json()) as { success: boolean; message?: string };
+      const json = (await res.json()) as {
+        success: boolean;
+        message?: string;
+        error?: { code: string; message: string };
+      };
       if (!res.ok || !json.success) {
-        setError(json.message ?? 'Failed to approve extraction');
+        setError(json.error?.message ?? json.message ?? 'Failed to approve extraction');
         return;
       }
       onApproved();

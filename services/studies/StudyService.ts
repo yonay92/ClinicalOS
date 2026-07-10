@@ -16,11 +16,39 @@ import type {
   StudyAiExtraction,
   FileRecord,
   CrcOption,
+  CreateVisitTemplateItemInput,
 } from '@/types/studies';
 import type { RequestContext } from '@/types/api';
 
 const STUDY_COLUMNS =
   'id, company_id, study_name, protocol_number, sponsor, cro, phase, therapeutic_area, status, start_date, end_date, protocol_version, ai_generated, created_by, created_at, updated_at';
+
+// AI protocol extraction is instructed to mark exactly one visit is_baseline: true
+// (see supabase/functions/protocol-ai), but nothing in that pipeline enforces it — a
+// model response can omit the flag on every item even when a Baseline visit is clearly
+// named. VisitTemplateService.createTemplate correctly rejects anything but exactly one
+// baseline, so recover deterministically here rather than leaving the reviewer stuck
+// with an "Approve" button that always fails. Ambiguous cases still fail loudly.
+export function resolveAiVisitTemplateBaseline(
+  items: CreateVisitTemplateItemInput[],
+): CreateVisitTemplateItemInput[] {
+  const markedCount = items.filter((item) => item.is_baseline).length;
+  if (markedCount === 1) return items;
+
+  const byName = items.filter((item) => /^baseline$/i.test(item.visit_name.trim()));
+  const byOffset = items.filter((item) => item.offset_days === 0);
+  const resolved = byName.length === 1 ? byName[0] : byOffset.length === 1 ? byOffset[0] : null;
+
+  if (!resolved) {
+    throw new BusinessRuleError(
+      markedCount === 0
+        ? 'The AI extraction did not mark a Baseline visit, and none could be identified automatically (no visit named "Baseline" and no single visit at offset_days 0). Edit the extraction data or create the Visit Template manually.'
+        : `The AI extraction marked ${markedCount} visits as Baseline. Edit the extraction data or create the Visit Template manually.`,
+    );
+  }
+
+  return items.map((item) => ({ ...item, is_baseline: item === resolved }));
+}
 
 export type StudyListFilters = {
   status?: StudyStatus | undefined;
@@ -286,7 +314,8 @@ export const StudyService = {
     if (row.extraction_type === 'visit_template') {
       const items = Array.isArray(extracted.items) ? extracted.items : [];
       if (items.length > 0) {
-        await VisitTemplateService.createTemplate(row.study_id, items, ctx, 'ai_generated');
+        const resolvedItems = resolveAiVisitTemplateBaseline(items);
+        await VisitTemplateService.createTemplate(row.study_id, resolvedItems, ctx, 'ai_generated');
       }
     }
 

@@ -5,7 +5,9 @@ import { SubjectStatusChanger } from '@/components/subjects/SubjectStatusChanger
 import { SubjectBaselineCompleter } from '@/components/subjects/SubjectBaselineCompleter';
 import { SubjectRandomizer } from '@/components/subjects/SubjectRandomizer';
 import { usePermissions } from '@/hooks/usePermissions';
+import { getVisitLockStatus } from '@/lib/utils/visitSequencing';
 import type { Subject, SubjectStatus, Visit } from '@/types/subjects';
+import type { VisitTemplateItem } from '@/types/studies';
 
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'default' | 'primary' | 'info';
 
@@ -25,15 +27,27 @@ export function SubjectProfileHeader({
   studyName,
   siteName,
   nextVisit,
+  visits,
+  templateItems,
   onChanged,
 }: {
   subject: Subject;
   studyName: string;
   siteName: string;
   nextVisit: Visit | null;
+  visits: Visit[];
+  templateItems: VisitTemplateItem[];
   onChanged: () => void;
 }) {
   const { hasPermission } = usePermissions();
+
+  const baselineItem = templateItems.find((i) => i.is_baseline);
+  const baselineVisit = baselineItem
+    ? visits.find((v) => v.visit_template_item_id === baselineItem.id)
+    : undefined;
+  const baselineLockStatus = baselineVisit
+    ? getVisitLockStatus(baselineVisit, visits, templateItems)
+    : { locked: false as const };
 
   return (
     <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
@@ -59,7 +73,11 @@ export function SubjectProfileHeader({
 
         {hasPermission('edit_subject') && (
           <div className="flex items-center gap-2">
-            <SubjectBaselineCompleter subject={subject} onChanged={onChanged} />
+            <SubjectBaselineCompleter
+              subject={subject}
+              lockStatus={baselineLockStatus}
+              onChanged={onChanged}
+            />
             <SubjectRandomizer subject={subject} onChanged={onChanged} />
             <SubjectStatusChanger subject={subject} onChanged={onChanged} />
           </div>

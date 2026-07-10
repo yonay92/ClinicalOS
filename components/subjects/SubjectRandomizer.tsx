@@ -21,6 +21,19 @@ export function SubjectRandomizer({
 
   if (subject.randomization_date || subject.status !== 'screening') return null;
 
+  if (!subject.baseline_date) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        disabled
+        title="Complete the Baseline visit before randomizing"
+      >
+        Randomize
+      </Button>
+    );
+  }
+
   function openModal() {
     setRandomizationNumber('');
     setRandomizationDate('');
@@ -48,9 +61,13 @@ export function SubjectRandomizer({
           randomization_date: randomizationDate,
         }),
       });
-      const json = (await res.json()) as { success: boolean; message?: string };
+      const json = (await res.json()) as {
+        success: boolean;
+        message?: string;
+        error?: { code: string; message: string };
+      };
       if (!res.ok || !json.success) {
-        setError(json.message ?? 'Failed to randomize subject');
+        setError(json.error?.message ?? json.message ?? 'Failed to randomize subject');
         return;
       }
       setOpen(false);

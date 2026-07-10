@@ -325,6 +325,25 @@ describe('SubjectService — company isolation', () => {
       SubjectService.getById('subject-other-company', makeCtx(COMPANY_A)),
     ).rejects.toThrow(NotFoundError);
   });
+
+  it('completeVisit() scopes the initial subject lookup to company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient(null, null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      SubjectService.completeVisit(
+        'subject-other-company',
+        'visit-1',
+        { scheduled_date: '2026-02-01' },
+        makeCtx(COMPANY_A),
+      ),
+    ).rejects.toThrow(NotFoundError);
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
 });
 
 // ── AIDraftService ──────────────────────────────────────────────────────────

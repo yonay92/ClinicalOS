@@ -3,7 +3,10 @@
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { classifyVisit, type VisitScheduleBucket } from '@/lib/utils/visitStatus';
+import { getVisitLockStatus, sortVisitsByOrder } from '@/lib/utils/visitSequencing';
+import { VisitCompleter } from '@/components/subjects/VisitCompleter';
 import type { Visit, VisitStatus } from '@/types/subjects';
+import type { VisitTemplateItem } from '@/types/studies';
 
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'default' | 'primary' | 'info';
 
@@ -36,7 +39,17 @@ const SCHEDULE_VARIANT: Record<VisitScheduleBucket, BadgeVariant> = {
   cancelled: 'default',
 };
 
-export function SubjectVisitsList({ visits }: { visits: Visit[] }) {
+export function SubjectVisitsList({
+  subjectId,
+  visits,
+  templateItems,
+  onChanged,
+}: {
+  subjectId: string;
+  visits: Visit[];
+  templateItems: VisitTemplateItem[];
+  onChanged: () => void;
+}) {
   if (visits.length === 0) {
     return (
       <EmptyState
@@ -45,6 +58,10 @@ export function SubjectVisitsList({ visits }: { visits: Visit[] }) {
       />
     );
   }
+
+  // Server already returns visits in visit_order; re-sorting here is a stable
+  // client-side fallback in case that ever changes upstream.
+  const orderedVisits = sortVisitsByOrder(visits, templateItems);
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -55,13 +72,16 @@ export function SubjectVisitsList({ visits }: { visits: Visit[] }) {
             <th className="px-4 py-3 text-left font-medium text-gray-600">Type</th>
             <th className="px-4 py-3 text-left font-medium text-gray-600">Target Date</th>
             <th className="px-4 py-3 text-left font-medium text-gray-600">Window</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-600">Actual Date</th>
             <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
             <th className="px-4 py-3 text-left font-medium text-gray-600">Schedule</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-600">Action</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {visits.map((visit) => {
+          {orderedVisits.map((visit) => {
             const bucket = classifyVisit(visit);
+            const lockStatus = getVisitLockStatus(visit, orderedVisits, templateItems);
             return (
               <tr key={visit.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-900">{visit.visit_name}</td>
@@ -72,6 +92,7 @@ export function SubjectVisitsList({ visits }: { visits: Visit[] }) {
                     ? `${visit.window_start} – ${visit.window_end}`
                     : '—'}
                 </td>
+                <td className="px-4 py-3 text-gray-600">{visit.scheduled_date ?? '—'}</td>
                 <td className="px-4 py-3">
                   <Badge variant={STATUS_VARIANT[visit.status]}>
                     {visit.status.replace(/_/g, ' ')}
@@ -83,6 +104,14 @@ export function SubjectVisitsList({ visits }: { visits: Visit[] }) {
                   ) : (
                     '—'
                   )}
+                </td>
+                <td className="px-4 py-3">
+                  <VisitCompleter
+                    subjectId={subjectId}
+                    visit={visit}
+                    lockStatus={lockStatus}
+                    onChanged={onChanged}
+                  />
                 </td>
               </tr>
             );

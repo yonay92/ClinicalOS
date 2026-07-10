@@ -3,6 +3,7 @@ import { PermissionService } from '@/services/permissions/PermissionService';
 import { AuditService } from '@/services/audit/AuditService';
 import { NotificationService } from '@/services/notifications/NotificationService';
 import { VisitTemplateService } from '@/services/visit-templates/VisitTemplateService';
+import { getVisitLockStatus, sortVisitsByOrder } from '@/lib/utils/visitSequencing';
 import {
   NotFoundError,
   DatabaseError,
@@ -15,6 +16,7 @@ import type {
   CreateSubjectInput,
   UpdateSubjectInput,
   CompleteBaselineVisitInput,
+  CompleteVisitInput,
   RandomizeSubjectInput,
   SubjectStatusHistory,
   SubjectNote,
@@ -30,6 +32,8 @@ const SUBJECT_COLUMNS =
   'id, company_id, site_id, study_id, subject_number, initials, status, screening_date, baseline_date, randomization_date, randomization_number, end_of_study_date, created_by, created_at, updated_at';
 const VISIT_COLUMNS =
   'id, company_id, site_id, study_id, subject_id, visit_template_item_id, visit_name, visit_type, target_date, scheduled_date, window_start, window_end, status, created_by, created_at, updated_at';
+const TEMPLATE_ITEM_COLUMNS =
+  'id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, is_baseline, notes, created_at, updated_at';
 const STATUS_HISTORY_COLUMNS =
   'id, company_id, subject_id, old_status, new_status, changed_by, changed_at, reason';
 const NOTE_COLUMNS = 'id, company_id, subject_id, note, visibility, created_by, created_at';
@@ -236,14 +240,14 @@ export const SubjectService = {
       .maybeSingle();
 
     if (template) {
-      const { data: baselineItem } = await supabase
+      const { data: items } = await supabase
         .from('visit_template_items')
-        .select(
-          'id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, is_baseline, notes, created_at, updated_at',
-        )
+        .select(TEMPLATE_ITEM_COLUMNS)
         .eq('template_id', (template as { id: string }).id)
-        .eq('is_baseline', true)
-        .maybeSingle();
+        .order('visit_order');
+
+      const allItems = (items as VisitTemplateItem[]) ?? [];
+      const baselineItem = allItems.find((i) => i.is_baseline);
 
       if (!baselineItem) {
         throw new BusinessRuleError(
@@ -251,21 +255,29 @@ export const SubjectService = {
         );
       }
 
-      const item = baselineItem as VisitTemplateItem;
-      const { error: visitError } = await supabase.from('visits').insert({
-        company_id: ctx.company.id,
-        site_id: subject.site_id,
-        study_id: subject.study_id,
-        subject_id: subject.id,
-        visit_template_item_id: item.id,
-        visit_name: item.visit_name,
-        visit_type: item.visit_type,
-        target_date: null,
-        window_start: null,
-        window_end: null,
-        status: 'scheduled',
-        created_by: ctx.user.id,
-      });
+      // Everything up to and including Baseline is created now — items ordered before
+      // Baseline (e.g. Screening) need to exist as real, completable rows so the
+      // out-of-sequence lock has something to check Baseline against. Everything after
+      // Baseline is still unanchored (no baseline_date yet) and is generated once
+      // Baseline is completed (generateVisitSchedule).
+      const initialItems = allItems.filter((i) => i.visit_order <= baselineItem.visit_order);
+
+      const { error: visitError } = await supabase.from('visits').insert(
+        initialItems.map((item) => ({
+          company_id: ctx.company.id,
+          site_id: subject.site_id,
+          study_id: subject.study_id,
+          subject_id: subject.id,
+          visit_template_item_id: item.id,
+          visit_name: item.visit_name,
+          visit_type: item.visit_type,
+          target_date: null,
+          window_start: null,
+          window_end: null,
+          status: 'scheduled',
+          created_by: ctx.user.id,
+        })),
+      );
       if (visitError) throw new DatabaseError(visitError.message);
 
       await this.addTimelineEvent(
@@ -273,7 +285,7 @@ export const SubjectService = {
         ctx.company.id,
         'baseline_visit_scheduled',
         new Date().toISOString(),
-        `${item.visit_name} visit scheduled — pending completion`,
+        `${initialItems.length} visit(s) scheduled through Baseline — pending completion`,
         ctx.user.id,
       );
     }
@@ -346,17 +358,19 @@ export const SubjectService = {
 
     const { data: items } = await supabase
       .from('visit_template_items')
-      .select(
-        'id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, is_baseline, notes, created_at, updated_at',
-      )
+      .select(TEMPLATE_ITEM_COLUMNS)
       .eq('template_id', (template as { id: string }).id)
       .order('visit_order');
 
-    // The Baseline item's visit already exists (created as a placeholder at subject
-    // creation, then completed via completeBaselineVisit) — never re-generate it here.
-    const templateItems = ((items as VisitTemplateItem[]) ?? []).filter(
-      (item) => !item.is_baseline,
-    );
+    const allItems = (items as VisitTemplateItem[]) ?? [];
+    const baselineItem = allItems.find((i) => i.is_baseline);
+
+    // Everything at or before Baseline's visit_order already exists as a visit row
+    // (created at subject creation — see SubjectService.create) — only generate what's
+    // ordered strictly after Baseline, or those rows would be duplicated.
+    const templateItems = baselineItem
+      ? allItems.filter((item) => item.visit_order > baselineItem.visit_order)
+      : allItems.filter((item) => !item.is_baseline);
     if (templateItems.length === 0) return [];
 
     const rows = templateItems.map((item) => {
@@ -395,6 +409,44 @@ export const SubjectService = {
     return (inserted as Visit[]) ?? [];
   },
 
+  // Fetches the subject's approved template items and all of its current visit rows —
+  // the shared context the out-of-sequence lock check needs. Reused by
+  // completeBaselineVisit and completeVisit.
+  async getVisitScheduleContext(
+    subject: Subject,
+    ctx: RequestContext,
+  ): Promise<{ templateItems: VisitTemplateItem[]; allVisits: Visit[] }> {
+    const supabase = await createServerSupabaseClient();
+
+    const { data: template } = await supabase
+      .from('visit_templates')
+      .select('id')
+      .eq('study_id', subject.study_id)
+      .eq('company_id', ctx.company.id)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    if (!template) return { templateItems: [], allVisits: [] };
+
+    const [{ data: items }, { data: visits }] = await Promise.all([
+      supabase
+        .from('visit_template_items')
+        .select(TEMPLATE_ITEM_COLUMNS)
+        .eq('template_id', (template as { id: string }).id)
+        .order('visit_order'),
+      supabase
+        .from('visits')
+        .select(VISIT_COLUMNS)
+        .eq('subject_id', subject.id)
+        .eq('company_id', ctx.company.id),
+    ]);
+
+    return {
+      templateItems: (items as VisitTemplateItem[]) ?? [],
+      allVisits: (visits as Visit[]) ?? [],
+    };
+  },
+
   async completeBaselineVisit(
     subjectId: string,
     input: CompleteBaselineVisitInput,
@@ -408,26 +460,8 @@ export const SubjectService = {
       throw new BusinessRuleError('Baseline visit has already been completed for this subject');
     }
 
-    const supabase = await createServerSupabaseClient();
-
-    const { data: template } = await supabase
-      .from('visit_templates')
-      .select('id')
-      .eq('study_id', subject.study_id)
-      .eq('company_id', ctx.company.id)
-      .eq('status', 'approved')
-      .maybeSingle();
-
-    const { data: baselineItem } = template
-      ? await supabase
-          .from('visit_template_items')
-          .select(
-            'id, template_id, visit_name, visit_order, offset_days, window_before, window_after, visit_type, is_required, is_baseline, notes, created_at, updated_at',
-          )
-          .eq('template_id', (template as { id: string }).id)
-          .eq('is_baseline', true)
-          .maybeSingle()
-      : { data: null };
+    const { templateItems, allVisits } = await this.getVisitScheduleContext(subject, ctx);
+    const baselineItem = templateItems.find((i) => i.is_baseline);
 
     if (!baselineItem) {
       throw new BusinessRuleError(
@@ -435,19 +469,20 @@ export const SubjectService = {
       );
     }
 
-    const item = baselineItem as VisitTemplateItem;
+    const item = baselineItem;
 
-    const { data: baselineVisit } = await supabase
-      .from('visits')
-      .select('id')
-      .eq('subject_id', subjectId)
-      .eq('company_id', ctx.company.id)
-      .eq('visit_template_item_id', item.id)
-      .maybeSingle();
+    const baselineVisit = allVisits.find((v) => v.visit_template_item_id === item.id);
 
     if (!baselineVisit) {
       throw new NotFoundError('Baseline visit');
     }
+
+    const lockStatus = getVisitLockStatus(baselineVisit, allVisits, templateItems);
+    if (lockStatus.locked) {
+      throw new BusinessRuleError(lockStatus.reason);
+    }
+
+    const supabase = await createServerSupabaseClient();
 
     const { error: visitError } = await supabase
       .from('visits')
@@ -458,7 +493,7 @@ export const SubjectService = {
         window_start: addDaysToDateString(input.baseline_date, -item.window_before),
         window_end: addDaysToDateString(input.baseline_date, item.window_after),
       })
-      .eq('id', (baselineVisit as { id: string }).id)
+      .eq('id', baselineVisit.id)
       .eq('company_id', ctx.company.id);
 
     if (visitError) throw new DatabaseError(visitError.message);
@@ -502,6 +537,84 @@ export const SubjectService = {
     return result;
   },
 
+  // Generic completion for any non-Baseline visit. Baseline keeps its own dedicated
+  // action (completeBaselineVisit) because completing it has extra side effects —
+  // recording subject.baseline_date and generating the rest of the schedule.
+  async completeVisit(
+    subjectId: string,
+    visitId: string,
+    input: CompleteVisitInput,
+    ctx: RequestContext,
+  ): Promise<Visit> {
+    await PermissionService.requirePermission(ctx.user.id, 'edit_subject');
+
+    const subject = await this.getById(subjectId, ctx);
+
+    const supabase = await createServerSupabaseClient();
+    const { data: visitRow, error } = await supabase
+      .from('visits')
+      .select(VISIT_COLUMNS)
+      .eq('id', visitId)
+      .eq('subject_id', subjectId)
+      .eq('company_id', ctx.company.id)
+      .single();
+
+    if (error || !visitRow) throw new NotFoundError('Visit');
+    const visit = visitRow as Visit;
+
+    if (visit.status === 'completed') {
+      throw new BusinessRuleError('Visit has already been completed');
+    }
+
+    const { templateItems, allVisits } = await this.getVisitScheduleContext(subject, ctx);
+    const item = templateItems.find((i) => i.id === visit.visit_template_item_id);
+
+    if (item?.is_baseline) {
+      throw new BusinessRuleError('Use the Complete Baseline Visit action for the Baseline visit');
+    }
+
+    const lockStatus = getVisitLockStatus(visit, allVisits, templateItems);
+    if (lockStatus.locked) {
+      throw new BusinessRuleError(lockStatus.reason);
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('visits')
+      .update({ status: 'completed', scheduled_date: input.scheduled_date })
+      .eq('id', visitId)
+      .eq('company_id', ctx.company.id)
+      .select(VISIT_COLUMNS)
+      .single();
+
+    if (updateError || !updated) {
+      throw new DatabaseError(updateError?.message ?? 'Failed to complete visit');
+    }
+
+    await this.addTimelineEvent(
+      subjectId,
+      ctx.company.id,
+      'visit_completed',
+      new Date().toISOString(),
+      `${visit.visit_name} visit completed on ${input.scheduled_date}`,
+      ctx.user.id,
+      'visits',
+      visitId,
+    );
+
+    await AuditService.log({
+      company_id: ctx.company.id,
+      site_id: subject.site_id,
+      user_id: ctx.user.id,
+      action: 'visit.completed',
+      module: 'subjects',
+      record_type: 'visits',
+      record_id: visitId,
+      new_value: { status: 'completed', scheduled_date: input.scheduled_date },
+    });
+
+    return updated as Visit;
+  },
+
   async randomize(
     subjectId: string,
     input: RandomizeSubjectInput,
@@ -513,6 +626,12 @@ export const SubjectService = {
 
     if (subject.randomization_date) {
       throw new BusinessRuleError('Subject has already been randomized');
+    }
+
+    if (!subject.baseline_date) {
+      throw new BusinessRuleError(
+        'Cannot randomize a subject until the Baseline visit has been completed',
+      );
     }
 
     if (!isValidStatusTransition(subject.status, 'randomized')) {
@@ -874,16 +993,21 @@ export const SubjectService = {
 
   async listVisits(subjectId: string, ctx: RequestContext): Promise<Visit[]> {
     await PermissionService.requireAnyPermission(ctx.user.id, ['view_subjects', 'view_visits']);
-    await this.getById(subjectId, ctx);
+    const subject = await this.getById(subjectId, ctx);
 
     const supabase = await createServerSupabaseClient();
     const { data } = await supabase
       .from('visits')
       .select(VISIT_COLUMNS)
       .eq('subject_id', subjectId)
-      .eq('company_id', ctx.company.id)
-      .order('target_date', { ascending: true });
+      .eq('company_id', ctx.company.id);
 
-    return (data as Visit[]) ?? [];
+    const visits = (data as Visit[]) ?? [];
+    if (visits.length === 0) return visits;
+
+    // Sort by the approved template's visit_order, not target_date — pre-Baseline
+    // items (e.g. Screening) have no target_date and must not sort to the end.
+    const { templateItems } = await this.getVisitScheduleContext(subject, ctx);
+    return sortVisitsByOrder(visits, templateItems);
   },
 };

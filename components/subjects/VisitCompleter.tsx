@@ -5,50 +5,59 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { VisitLockStatus } from '@/lib/utils/visitSequencing';
-import type { Subject } from '@/types/subjects';
+import type { Visit } from '@/types/subjects';
 
-export function SubjectBaselineCompleter({
-  subject,
+const PENDING_STATUSES: Visit['status'][] = [
+  'scheduled',
+  'confirmed',
+  'in_progress',
+  'rescheduled',
+];
+
+export function VisitCompleter({
+  subjectId,
+  visit,
   lockStatus,
   onChanged,
 }: {
-  subject: Subject;
+  subjectId: string;
+  visit: Visit;
   lockStatus: VisitLockStatus;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [baselineDate, setBaselineDate] = useState('');
+  const [scheduledDate, setScheduledDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (subject.baseline_date) return null;
+  if (!PENDING_STATUSES.includes(visit.status)) return null;
 
   if (lockStatus.locked) {
     return (
       <div className="text-xs text-gray-500">
-        <span className="font-medium text-gray-600">Baseline locked</span> — {lockStatus.reason}
+        <span className="font-medium text-gray-600">Locked</span> — {lockStatus.reason}
       </div>
     );
   }
 
   function openModal() {
-    setBaselineDate('');
+    setScheduledDate('');
     setError(null);
     setOpen(true);
   }
 
   async function handleSubmit() {
-    if (!baselineDate) {
-      setError('Baseline date is required');
+    if (!scheduledDate) {
+      setError('Completion date is required');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/subjects/${subject.id}/baseline`, {
+      const res = await fetch(`/api/subjects/${subjectId}/visits/${visit.id}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseline_date: baselineDate }),
+        body: JSON.stringify({ scheduled_date: scheduledDate }),
       });
       const json = (await res.json()) as {
         success: boolean;
@@ -56,7 +65,7 @@ export function SubjectBaselineCompleter({
         error?: { code: string; message: string };
       };
       if (!res.ok || !json.success) {
-        setError(json.error?.message ?? json.message ?? 'Failed to complete baseline visit');
+        setError(json.error?.message ?? json.message ?? 'Failed to complete visit');
         return;
       }
       setOpen(false);
@@ -71,18 +80,17 @@ export function SubjectBaselineCompleter({
   return (
     <>
       <Button size="sm" variant="outline" onClick={openModal}>
-        Complete Baseline Visit
+        Complete
       </Button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Complete Baseline Visit">
+      <Modal open={open} onClose={() => setOpen(false)} title={`Complete ${visit.visit_name}`}>
         <div className="space-y-4">
           <Input
-            label="Baseline date"
+            label="Completion date"
             type="date"
-            value={baselineDate}
-            onChange={(e) => setBaselineDate(e.target.value)}
+            value={scheduledDate}
+            onChange={(e) => setScheduledDate(e.target.value)}
             required
-            hint="Anchors the rest of the protocol visit schedule"
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-3 pt-2">

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import { StudyService } from '@/services/studies/StudyService';
+import { StudyService, resolveAiVisitTemplateBaseline } from '@/services/studies/StudyService';
 import { PermissionService } from '@/services/permissions/PermissionService';
 import { VisitTemplateService } from '@/services/visit-templates/VisitTemplateService';
 import { AuditService } from '@/services/audit/AuditService';
@@ -487,6 +487,131 @@ describe('StudyService.approveAIExtraction', () => {
         primary_endpoint: 'Change in HbA1c from baseline',
       }),
     );
+  });
+
+  it('auto-resolves a missing Baseline flag by visit name before creating the template', async () => {
+    vi.spyOn(PermissionService, 'requireAnyPermission').mockResolvedValue(undefined);
+
+    const extractionRow = {
+      id: 'extraction-1',
+      company_id: COMPANY_ID,
+      study_id: STUDY_ID,
+      extraction_type: 'visit_template',
+      extracted_data: {
+        items: [
+          { visit_name: 'Screening', visit_order: 1, offset_days: -14 },
+          { visit_name: 'Baseline', visit_order: 2, offset_days: 0 },
+          { visit_name: 'Week 4', visit_order: 3, offset_days: 28 },
+        ],
+      },
+    };
+    const client = makeSupabaseClient(
+      { data: extractionRow }, // study_ai_extractions select
+      { data: { ...extractionRow, approved: true } }, // study_ai_extractions update+select
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await StudyService.approveAIExtraction('extraction-1', makeCtx(), STUDY_ID);
+
+    expect(VisitTemplateService.createTemplate).toHaveBeenCalledWith(
+      STUDY_ID,
+      [
+        expect.objectContaining({ visit_name: 'Screening', is_baseline: false }),
+        expect.objectContaining({ visit_name: 'Baseline', is_baseline: true }),
+        expect.objectContaining({ visit_name: 'Week 4', is_baseline: false }),
+      ],
+      expect.anything(),
+      'ai_generated',
+    );
+  });
+
+  it('throws BusinessRuleError instead of calling createTemplate when the baseline cannot be resolved', async () => {
+    vi.spyOn(PermissionService, 'requireAnyPermission').mockResolvedValue(undefined);
+
+    const extractionRow = {
+      id: 'extraction-1',
+      company_id: COMPANY_ID,
+      study_id: STUDY_ID,
+      extraction_type: 'visit_template',
+      extracted_data: {
+        items: [
+          { visit_name: 'Screening', visit_order: 1, offset_days: -14 },
+          { visit_name: 'Week 4', visit_order: 2, offset_days: 28 },
+        ],
+      },
+    };
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
+      makeSupabaseClient({ data: extractionRow }),
+    );
+
+    await expect(
+      StudyService.approveAIExtraction('extraction-1', makeCtx(), STUDY_ID),
+    ).rejects.toThrow(BusinessRuleError);
+    expect(VisitTemplateService.createTemplate).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveAiVisitTemplateBaseline', () => {
+  const item = (
+    overrides: Partial<Parameters<typeof resolveAiVisitTemplateBaseline>[0][number]>,
+  ) => ({
+    visit_name: 'Visit',
+    visit_order: 1,
+    ...overrides,
+  });
+
+  it('returns items unchanged when exactly one is already marked is_baseline', () => {
+    const items = [
+      item({ visit_name: 'Screening', is_baseline: false }),
+      item({ visit_name: 'Baseline', is_baseline: true }),
+    ];
+    expect(resolveAiVisitTemplateBaseline(items)).toBe(items);
+  });
+
+  it('resolves by exact case-insensitive visit name match when none are marked', () => {
+    const items = [
+      item({ visit_name: 'Screening' }),
+      item({ visit_name: 'BASELINE' }),
+      item({ visit_name: 'Week 4' }),
+    ];
+    const result = resolveAiVisitTemplateBaseline(items);
+    expect(result.find((i) => i.visit_name === 'BASELINE')?.is_baseline).toBe(true);
+    expect(result.filter((i) => i.is_baseline)).toHaveLength(1);
+  });
+
+  it('resolves by a unique offset_days of 0 when no visit is named Baseline', () => {
+    const items = [
+      item({ visit_name: 'Day 1', offset_days: 0 }),
+      item({ visit_name: 'Week 4', offset_days: 28 }),
+    ];
+    const result = resolveAiVisitTemplateBaseline(items);
+    expect(result.find((i) => i.visit_name === 'Day 1')?.is_baseline).toBe(true);
+  });
+
+  it('throws when zero items are marked and no name or offset match is unique', () => {
+    const items = [
+      item({ visit_name: 'Screening', offset_days: -14 }),
+      item({ visit_name: 'Week 4', offset_days: 28 }),
+    ];
+    expect(() => resolveAiVisitTemplateBaseline(items)).toThrow(BusinessRuleError);
+  });
+
+  it('throws when multiple items are marked and no name match disambiguates them', () => {
+    const items = [
+      item({ visit_name: 'Visit A', is_baseline: true }),
+      item({ visit_name: 'Visit B', is_baseline: true }),
+    ];
+    expect(() => resolveAiVisitTemplateBaseline(items)).toThrow(BusinessRuleError);
+  });
+
+  it('resolves by name even when multiple items are incorrectly marked is_baseline', () => {
+    const items = [
+      item({ visit_name: 'Baseline', is_baseline: true }),
+      item({ visit_name: 'Week 4', is_baseline: true }),
+    ];
+    const result = resolveAiVisitTemplateBaseline(items);
+    expect(result.find((i) => i.visit_name === 'Baseline')?.is_baseline).toBe(true);
+    expect(result.filter((i) => i.is_baseline)).toHaveLength(1);
   });
 });
 

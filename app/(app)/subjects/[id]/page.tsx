@@ -9,6 +9,7 @@ import { SubjectTimeline } from '@/components/subjects/SubjectTimeline';
 import { SubjectNotes } from '@/components/subjects/SubjectNotes';
 import { SubjectDocuments } from '@/components/subjects/SubjectDocuments';
 import type { Subject, Visit, SubjectStatusHistory } from '@/types/subjects';
+import type { VisitTemplateItem, VisitTemplateWithItems } from '@/types/studies';
 
 const TABS = ['Overview', 'Visits', 'Timeline', 'Notes', 'Documents', 'History'] as const;
 type Tab = (typeof TABS)[number];
@@ -19,6 +20,7 @@ export default function SubjectProfilePage({ params }: { params: Promise<{ id: s
   const [studyName, setStudyName] = useState('—');
   const [siteName, setSiteName] = useState('—');
   const [visits, setVisits] = useState<Visit[]>([]);
+  const [templateItems, setTemplateItems] = useState<VisitTemplateItem[]>([]);
   const [history, setHistory] = useState<SubjectStatusHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('Overview');
@@ -35,10 +37,11 @@ export default function SubjectProfilePage({ params }: { params: Promise<{ id: s
       const subjectData = json.data;
       setSubject(subjectData);
 
-      const [studyRes, sitesRes, visitsRes] = await Promise.all([
+      const [studyRes, sitesRes, visitsRes, templatesRes] = await Promise.all([
         fetch(`/api/studies/${subjectData.study_id}`),
         fetch('/api/sites'),
         fetch(`/api/subjects/${subjectId}/visits`),
+        fetch(`/api/studies/${subjectData.study_id}/visit-templates`),
       ]);
       if (studyRes.ok) {
         const studyJson = (await studyRes.json()) as { data: { study_name: string } };
@@ -52,6 +55,11 @@ export default function SubjectProfilePage({ params }: { params: Promise<{ id: s
       if (visitsRes.ok) {
         const visitsJson = (await visitsRes.json()) as { data: Visit[] };
         setVisits(visitsJson.data);
+      }
+      if (templatesRes.ok) {
+        const templatesJson = (await templatesRes.json()) as { data: VisitTemplateWithItems[] };
+        const approved = templatesJson.data.find((t) => t.status === 'approved');
+        setTemplateItems(approved?.items ?? []);
       }
     } finally {
       setLoading(false);
@@ -97,6 +105,8 @@ export default function SubjectProfilePage({ params }: { params: Promise<{ id: s
         studyName={studyName}
         siteName={siteName}
         nextVisit={nextVisit}
+        visits={visits}
+        templateItems={templateItems}
         onChanged={() => void fetchSubject()}
       />
 
@@ -154,7 +164,14 @@ export default function SubjectProfilePage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {tab === 'Visits' && <SubjectVisitsList visits={visits} />}
+      {tab === 'Visits' && (
+        <SubjectVisitsList
+          subjectId={subject.id}
+          visits={visits}
+          templateItems={templateItems}
+          onChanged={() => void fetchSubject()}
+        />
+      )}
       {tab === 'Timeline' && <SubjectTimeline subjectId={subject.id} />}
       {tab === 'Notes' && <SubjectNotes subjectId={subject.id} />}
       {tab === 'Documents' && <SubjectDocuments subjectId={subject.id} />}

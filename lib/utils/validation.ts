@@ -274,6 +274,12 @@ export const completeBaselineVisitSchema = z.object({
 
 export type CompleteBaselineVisitSchema = z.infer<typeof completeBaselineVisitSchema>;
 
+export const completeVisitSchema = z.object({
+  scheduled_date: z.string().date(),
+});
+
+export type CompleteVisitSchema = z.infer<typeof completeVisitSchema>;
+
 export const randomizeSubjectSchema = z.object({
   randomization_number: z.string().min(1, 'Randomization number is required').max(50).trim(),
   randomization_date: z.string().date(),

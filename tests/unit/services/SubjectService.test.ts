@@ -154,11 +154,23 @@ describe('SubjectService.create', () => {
       baseline_date: null,
     };
     const template = { id: 'template-uuid' };
+    const screeningItem = {
+      id: 'item-screening-uuid',
+      template_id: 'template-uuid',
+      visit_name: 'Screening',
+      visit_order: 1,
+      offset_days: -14,
+      window_before: 0,
+      window_after: 0,
+      visit_type: 'scheduled',
+      is_required: true,
+      is_baseline: false,
+    };
     const baselineItem = {
       id: 'item-baseline-uuid',
       template_id: 'template-uuid',
       visit_name: 'Baseline',
-      visit_order: 1,
+      visit_order: 2,
       offset_days: 0,
       window_before: 0,
       window_after: 0,
@@ -166,15 +178,27 @@ describe('SubjectService.create', () => {
       is_required: true,
       is_baseline: true,
     };
+    const week4Item = {
+      id: 'item-week4-uuid',
+      template_id: 'template-uuid',
+      visit_name: 'Week 4',
+      visit_order: 3,
+      offset_days: 28,
+      window_before: 7,
+      window_after: 7,
+      visit_type: 'scheduled',
+      is_required: true,
+      is_baseline: false,
+    };
 
     const client = makeSupabaseClient(
       { data: activeStudy }, // studies lookup
       { data: studySite }, // study_sites lookup
       { data: subjectRow }, // subjects insert
       { data: null }, // subject_timeline insert (subject_created)
-      { data: template }, // visit_templates lookup (baseline placeholder)
-      { data: baselineItem }, // visit_template_items lookup (is_baseline = true)
-      { data: null }, // visits insert (Baseline placeholder)
+      { data: template }, // visit_templates lookup
+      { data: [screeningItem, baselineItem, week4Item] }, // visit_template_items (all, ordered)
+      { data: null }, // visits insert (Screening + Baseline placeholders)
       { data: null }, // subject_timeline insert (baseline_visit_scheduled)
     );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
@@ -185,6 +209,16 @@ describe('SubjectService.create', () => {
     expect(AuditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'subject.created', record_id: SUBJECT_ID }),
     );
+
+    // Everything at or before Baseline's visit_order is created now; Week 4 (after
+    // Baseline) is not — it's only generated once Baseline is completed.
+    const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
+    const visitsInsertStub = fromMock.mock.results[6]?.value as {
+      insert: ReturnType<typeof vi.fn>;
+    };
+    const insertedRows = (visitsInsertStub.insert as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as Array<{ visit_name: string }>;
+    expect(insertedRows.map((r) => r.visit_name)).toEqual(['Screening', 'Baseline']);
   });
 });
 
@@ -242,7 +276,8 @@ describe('SubjectService.completeBaselineVisit', () => {
     const client = makeSupabaseClient(
       { data: subjectRow }, // getById
       { data: { id: 'template-uuid' } }, // visit_templates lookup
-      { data: null }, // visit_template_items lookup (no is_baseline item)
+      { data: [] }, // visit_template_items (no is_baseline item)
+      { data: [] }, // visits (subject's current visits)
     );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
 
@@ -266,14 +301,63 @@ describe('SubjectService.completeBaselineVisit', () => {
     const client = makeSupabaseClient(
       { data: subjectRow }, // getById
       { data: { id: 'template-uuid' } }, // visit_templates lookup
-      { data: makeBaselineItem() }, // visit_template_items lookup
-      { data: null }, // visits lookup (no placeholder found)
+      { data: [makeBaselineItem()] }, // visit_template_items
+      { data: [] }, // visits (no placeholder found)
     );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
 
     await expect(
       SubjectService.completeBaselineVisit(SUBJECT_ID, { baseline_date: BASELINE_DATE }, makeCtx()),
     ).rejects.toThrow(NotFoundError);
+  });
+
+  it('throws BusinessRuleError when a required predecessor visit has not been completed', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const subjectRow = {
+      id: SUBJECT_ID,
+      company_id: COMPANY_ID,
+      site_id: SITE_ID,
+      study_id: STUDY_ID,
+      subject_number: '001-001',
+      status: 'screening',
+      baseline_date: null,
+    };
+    const screeningItem = {
+      id: 'item-screening-uuid',
+      template_id: 'template-uuid',
+      visit_name: 'Screening',
+      visit_order: 1,
+      offset_days: -14,
+      window_before: 0,
+      window_after: 0,
+      visit_type: 'scheduled',
+      is_required: true,
+      is_baseline: false,
+    };
+    const baselineItem = { ...makeBaselineItem(), visit_order: 2 };
+    const screeningVisit = {
+      id: 'visit-screening-uuid',
+      visit_template_item_id: screeningItem.id,
+      status: 'scheduled',
+    };
+    const baselineVisit = {
+      id: 'visit-baseline-uuid',
+      visit_template_item_id: baselineItem.id,
+      status: 'scheduled',
+    };
+
+    const client = makeSupabaseClient(
+      { data: subjectRow }, // getById
+      { data: { id: 'template-uuid' } }, // visit_templates lookup
+      { data: [screeningItem, baselineItem] }, // visit_template_items
+      { data: [screeningVisit, baselineVisit] }, // visits
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      SubjectService.completeBaselineVisit(SUBJECT_ID, { baseline_date: BASELINE_DATE }, makeCtx()),
+    ).rejects.toThrow(BusinessRuleError);
   });
 
   it('completes the Baseline visit, records baseline_date, and generates the rest of the schedule', async () => {
@@ -289,12 +373,18 @@ describe('SubjectService.completeBaselineVisit', () => {
       baseline_date: null,
     };
     const updatedSubjectRow = { ...subjectRow, baseline_date: BASELINE_DATE };
+    const baselineItem = makeBaselineItem();
+    const baselineVisit = {
+      id: 'visit-uuid',
+      visit_template_item_id: baselineItem.id,
+      status: 'scheduled',
+    };
 
     const client = makeSupabaseClient(
       { data: subjectRow }, // getById
       { data: { id: 'template-uuid' } }, // visit_templates lookup
-      { data: makeBaselineItem() }, // visit_template_items lookup
-      { data: { id: 'visit-uuid' } }, // visits lookup (placeholder found)
+      { data: [baselineItem] }, // visit_template_items (only item — no predecessors)
+      { data: [baselineVisit] }, // visits (subject's current visits)
       { data: null }, // visits update (mark completed)
       { data: updatedSubjectRow }, // subjects update (baseline_date)
       { data: null }, // subject_timeline insert (baseline_visit_completed)
@@ -347,6 +437,28 @@ describe('SubjectService.randomize', () => {
       site_id: SITE_ID,
       subject_number: '001-001',
       status: 'active',
+      baseline_date: '2026-01-01',
+      randomization_date: null,
+    };
+    vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
+      makeSupabaseClient({ data: subjectRow }),
+    );
+
+    await expect(
+      SubjectService.randomize(SUBJECT_ID, RANDOMIZATION_INPUT, makeCtx()),
+    ).rejects.toThrow(BusinessRuleError);
+  });
+
+  it('throws BusinessRuleError when the Baseline visit has not been completed', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const subjectRow = {
+      id: SUBJECT_ID,
+      company_id: COMPANY_ID,
+      site_id: SITE_ID,
+      subject_number: '001-001',
+      status: 'screening',
+      baseline_date: null,
       randomization_date: null,
     };
     vi.mocked(createServerSupabaseClient).mockResolvedValueOnce(
@@ -367,6 +479,7 @@ describe('SubjectService.randomize', () => {
       site_id: SITE_ID,
       subject_number: '001-001',
       status: 'screening',
+      baseline_date: '2026-01-01',
       randomization_date: null,
     };
     const updatedRow = {
@@ -391,6 +504,179 @@ describe('SubjectService.randomize', () => {
       expect.objectContaining({ action: 'subject.randomized', record_id: SUBJECT_ID }),
     );
     expect(NotificationService.dispatch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('SubjectService.completeVisit', () => {
+  const VISIT_ID = 'visit-week4-uuid';
+  const COMPLETE_INPUT = { scheduled_date: '2026-02-12' };
+
+  function makeSubjectRow() {
+    return {
+      id: SUBJECT_ID,
+      company_id: COMPANY_ID,
+      site_id: SITE_ID,
+      study_id: STUDY_ID,
+      subject_number: '001-001',
+      status: 'active',
+      baseline_date: '2026-01-15',
+    };
+  }
+
+  it('throws PermissionDeniedError when user lacks edit_subject', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockRejectedValue(
+      new PermissionDeniedError('edit_subject'),
+    );
+
+    await expect(
+      SubjectService.completeVisit(SUBJECT_ID, VISIT_ID, COMPLETE_INPUT, makeCtx()),
+    ).rejects.toThrow(PermissionDeniedError);
+  });
+
+  it('throws NotFoundError when the visit does not exist', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const client = makeSupabaseClient(
+      { data: makeSubjectRow() }, // getById
+      { data: null }, // visits select -> not found
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      SubjectService.completeVisit(SUBJECT_ID, VISIT_ID, COMPLETE_INPUT, makeCtx()),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('throws BusinessRuleError when the visit is already completed', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const client = makeSupabaseClient(
+      { data: makeSubjectRow() }, // getById
+      { data: { id: VISIT_ID, status: 'completed', visit_template_item_id: 'item-week4' } }, // visits select
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      SubjectService.completeVisit(SUBJECT_ID, VISIT_ID, COMPLETE_INPUT, makeCtx()),
+    ).rejects.toThrow(BusinessRuleError);
+  });
+
+  it('throws BusinessRuleError when attempting to complete the Baseline visit through this action', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const baselineItem = {
+      id: 'item-baseline',
+      template_id: 'template-uuid',
+      visit_name: 'Baseline',
+      visit_order: 1,
+      is_required: true,
+      is_baseline: true,
+    };
+    const baselineVisit = {
+      id: VISIT_ID,
+      status: 'scheduled',
+      visit_template_item_id: baselineItem.id,
+    };
+
+    const client = makeSupabaseClient(
+      { data: makeSubjectRow() }, // getById
+      { data: baselineVisit }, // visits select
+      { data: { id: 'template-uuid' } }, // visit_templates lookup
+      { data: [baselineItem] }, // visit_template_items
+      { data: [baselineVisit] }, // visits (all)
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      SubjectService.completeVisit(SUBJECT_ID, VISIT_ID, COMPLETE_INPUT, makeCtx()),
+    ).rejects.toThrow(BusinessRuleError);
+  });
+
+  it('throws BusinessRuleError when a required predecessor visit has not been completed', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const week4Item = {
+      id: 'item-week4',
+      template_id: 'template-uuid',
+      visit_name: 'Week 4',
+      visit_order: 2,
+      is_required: true,
+      is_baseline: false,
+    };
+    const baselineItem = {
+      id: 'item-baseline',
+      template_id: 'template-uuid',
+      visit_name: 'Baseline',
+      visit_order: 1,
+      is_required: true,
+      is_baseline: true,
+    };
+    const week4Visit = { id: VISIT_ID, status: 'scheduled', visit_template_item_id: week4Item.id };
+    const baselineVisit = {
+      id: 'visit-baseline',
+      status: 'scheduled', // not yet completed
+      visit_template_item_id: baselineItem.id,
+    };
+
+    const client = makeSupabaseClient(
+      { data: makeSubjectRow() }, // getById
+      { data: week4Visit }, // visits select (target visit)
+      { data: { id: 'template-uuid' } }, // visit_templates lookup
+      { data: [baselineItem, week4Item] }, // visit_template_items
+      { data: [baselineVisit, week4Visit] }, // visits (all)
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      SubjectService.completeVisit(SUBJECT_ID, VISIT_ID, COMPLETE_INPUT, makeCtx()),
+    ).rejects.toThrow(BusinessRuleError);
+  });
+
+  it('completes a non-Baseline visit and writes an audit log + timeline event when unlocked', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+
+    const week4Item = {
+      id: 'item-week4',
+      template_id: 'template-uuid',
+      visit_name: 'Week 4',
+      visit_order: 1,
+      is_required: true,
+      is_baseline: false,
+    };
+    const week4Visit = {
+      id: VISIT_ID,
+      status: 'scheduled',
+      visit_name: 'Week 4',
+      visit_template_item_id: week4Item.id,
+    };
+    const completedVisit = {
+      ...week4Visit,
+      status: 'completed',
+      scheduled_date: COMPLETE_INPUT.scheduled_date,
+    };
+
+    const client = makeSupabaseClient(
+      { data: makeSubjectRow() }, // getById
+      { data: week4Visit }, // visits select (target visit)
+      { data: { id: 'template-uuid' } }, // visit_templates lookup
+      { data: [week4Item] }, // visit_template_items (no predecessors)
+      { data: [week4Visit] }, // visits (all)
+      { data: completedVisit }, // visits update
+      { data: null }, // subject_timeline insert
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    const result = await SubjectService.completeVisit(
+      SUBJECT_ID,
+      VISIT_ID,
+      COMPLETE_INPUT,
+      makeCtx(),
+    );
+
+    expect(result.status).toBe('completed');
+    expect(AuditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'visit.completed', record_id: VISIT_ID }),
+    );
   });
 });
 
@@ -561,5 +847,87 @@ describe('SubjectService.getById', () => {
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
 
     await expect(SubjectService.getById(SUBJECT_ID, makeCtx())).rejects.toThrow(NotFoundError);
+  });
+});
+
+describe('SubjectService.listVisits', () => {
+  it('returns visits ordered by visit_order, not target_date, so Screening (no target_date) is not pushed last', async () => {
+    vi.spyOn(PermissionService, 'requireAnyPermission').mockResolvedValue(undefined);
+
+    const subjectRow = {
+      id: SUBJECT_ID,
+      company_id: COMPANY_ID,
+      site_id: SITE_ID,
+      study_id: STUDY_ID,
+      subject_number: '001-001',
+      status: 'active',
+    };
+    const screeningItem = {
+      id: 'item-screening',
+      template_id: 'template-uuid',
+      visit_name: 'Screening',
+      visit_order: 1,
+      is_required: true,
+      is_baseline: false,
+    };
+    const baselineItem = {
+      id: 'item-baseline',
+      template_id: 'template-uuid',
+      visit_name: 'Baseline',
+      visit_order: 2,
+      is_required: true,
+      is_baseline: true,
+    };
+    // Rows returned out of visit_order and with a null target_date on Screening —
+    // exactly the shape that a target_date ASC sort would push to the end.
+    const baselineVisit = {
+      id: 'visit-baseline',
+      visit_template_item_id: 'item-baseline',
+      visit_name: 'Baseline',
+      target_date: null,
+      status: 'scheduled',
+    };
+    const screeningVisit = {
+      id: 'visit-screening',
+      visit_template_item_id: 'item-screening',
+      visit_name: 'Screening',
+      target_date: null,
+      status: 'scheduled',
+    };
+
+    const client = makeSupabaseClient(
+      { data: subjectRow }, // getById
+      { data: [baselineVisit, screeningVisit] }, // visits select
+      { data: { id: 'template-uuid' } }, // visit_templates lookup
+      { data: [screeningItem, baselineItem] }, // visit_template_items
+      { data: [baselineVisit, screeningVisit] }, // visits (inside getVisitScheduleContext)
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    const result = await SubjectService.listVisits(SUBJECT_ID, makeCtx());
+
+    expect(result.map((v) => v.visit_name)).toEqual(['Screening', 'Baseline']);
+  });
+
+  it('returns an empty array without looking up the template when the subject has no visits', async () => {
+    vi.spyOn(PermissionService, 'requireAnyPermission').mockResolvedValue(undefined);
+
+    const subjectRow = {
+      id: SUBJECT_ID,
+      company_id: COMPANY_ID,
+      site_id: SITE_ID,
+      study_id: STUDY_ID,
+      subject_number: '001-001',
+      status: 'active',
+    };
+
+    const client = makeSupabaseClient(
+      { data: subjectRow }, // getById
+      { data: [] }, // visits select -> empty
+    );
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    const result = await SubjectService.listVisits(SUBJECT_ID, makeCtx());
+    expect(result).toEqual([]);
   });
 });

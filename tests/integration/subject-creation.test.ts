@@ -173,8 +173,8 @@ describe('Approved visit template gate blocks subject creation (GAP-REQ-03)', ()
       { data: studySite },
       { data: subjectRow },
       { data: null }, // subject_timeline insert (subject_created)
-      { data: template }, // visit_templates lookup (baseline placeholder)
-      { data: baselineItem }, // visit_template_items lookup (is_baseline = true)
+      { data: template }, // visit_templates lookup
+      { data: [baselineItem] }, // visit_template_items (all, ordered)
       { data: null }, // visits insert (Baseline placeholder)
       { data: null }, // subject_timeline insert (baseline_visit_scheduled)
     );

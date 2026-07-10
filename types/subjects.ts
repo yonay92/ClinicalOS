@@ -44,6 +44,10 @@ export type CompleteBaselineVisitInput = {
   baseline_date: string;
 };
 
+export type CompleteVisitInput = {
+  scheduled_date: string;
+};
+
 export type RandomizeSubjectInput = {
   randomization_number: string;
   randomization_date: string;
