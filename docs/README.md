@@ -9,21 +9,21 @@ automate clinical research operations.
 
 ClinicalOS is not just a CTMS. It integrates:
 
--   CTMS
--   eRegulatory
--   Business Rules Engine
--   Clinical Intelligence
--   Task Center
--   Enterprise Document Center
--   Executive Analytics
+- CTMS
+- eRegulatory
+- Business Rules Engine
+- Clinical Intelligence
+- Task Center
+- Enterprise Document Center
+- Executive Analytics
 
 ## Objectives
 
--   Reduce manual work.
--   Standardize clinical operations.
--   Improve data quality.
--   Provide complete traceability.
--   Scale to multiple companies and sites.
+- Reduce manual work.
+- Standardize clinical operations.
+- Improve data quality.
+- Provide complete traceability.
+- Scale to multiple companies and sites.
 
 ## Core Modules
 

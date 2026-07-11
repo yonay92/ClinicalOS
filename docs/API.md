@@ -103,6 +103,34 @@ Supabase Auth handles authentication.
 - Accept invitation
 - Session refresh
 
+### POST /api/invitations/accept
+
+Accepts an invitation and creates the user account.
+
+Auth: None — this is a public endpoint. The `token` is the credential.
+
+Required:
+
+- token
+- full_name
+- password
+
+On success: creates Supabase auth user, profile record, assigns roles and sites, marks invitation accepted.
+
+Response: `{ user_id, session }`
+
+### GET /api/invitations/validate
+
+Validates an invitation token before showing the acceptance form.
+
+Auth: None — public endpoint.
+
+Query:
+
+- token
+
+Response: `{ valid: true/false, email }` — never returns the full invitation record.
+
 ### Frontend Rule
 
 After login, the frontend must load:
@@ -136,7 +164,7 @@ Permissions:
 
 ### GET /api/users
 
-Returns users in the current company.
+Returns users in the current company, each with their assigned `roles` and `sites`.
 
 Filters:
 
@@ -151,9 +179,38 @@ Invites a user.
 Required:
 
 - email
-- full_name
-- roles
-- sites
+- role_ids (array of UUID)
+- site_ids (array of UUID)
+
+Note: `full_name` is NOT collected at invite time. The invitee enters their own name during account setup via `POST /api/invitations/accept`.
+
+Permissions:
+
+- Admin
+
+### GET /api/users/invitations
+
+Returns all invitations for the current company.
+
+Query filters:
+
+- status (pending | accepted | expired | revoked)
+
+Permissions:
+
+- Admin
+
+### DELETE /api/users/invitations/:id
+
+Revokes a pending invitation.
+
+Permissions:
+
+- Admin
+
+### POST /api/users/invitations/:id/resend
+
+Resends an invitation email with a refreshed token and extended expiry.
 
 Permissions:
 
@@ -161,11 +218,51 @@ Permissions:
 
 ### PATCH /api/users/:id
 
-Updates user profile, roles, status, or site access.
+Updates user profile or status.
 
 Permissions:
 
-- Admin
+- Admin (or self, for own profile)
+
+### POST /api/users/:id/roles
+
+Assigns a role to a user.
+
+Required:
+
+- role_id
+
+Permissions:
+
+- manage_users
+
+### DELETE /api/users/:id/roles/:roleId
+
+Removes a role from a user.
+
+Permissions:
+
+- manage_users
+
+### POST /api/users/:id/sites
+
+Assigns a site to a user.
+
+Required:
+
+- site_id
+
+Permissions:
+
+- manage_users
+
+### DELETE /api/users/:id/sites/:siteId
+
+Removes a site assignment from a user.
+
+Permissions:
+
+- manage_users
 
 ### DELETE /api/users/:id
 
@@ -175,6 +272,23 @@ Permissions:
 
 - Admin
 
+### GET /api/roles
+
+Returns all roles for the company, each with its assigned permissions.
+
+### PATCH /api/roles/:id/permissions
+
+Grants or revokes a single permission on a role.
+
+Required:
+
+- permission_key
+- allowed (boolean)
+
+Permissions:
+
+- manage_users
+
 ---
 
 ## 8. Sites API
@@ -183,21 +297,66 @@ Permissions:
 
 Returns sites available to the user.
 
+Filters:
+
+- search (matches name, site number, or city)
+- view (`active` | `archived` | `all` — defaults to `active`, which excludes
+  archived sites)
+
 ### POST /api/sites
 
 Creates a site.
 
+Business Rules:
+
+- If this is the first site created for the company, every user holding the
+  `admin` role is automatically assigned to it via `user_sites` (in addition to
+  the `view_all_sites` permission they already hold, which grants access to
+  every site regardless of explicit assignment).
+
 Permissions:
 
-- Admin
+- manage_sites
+
+### GET /api/sites/:id
+
+Returns a single site.
 
 ### PATCH /api/sites/:id
 
-Updates a site.
+Updates a site (name, site number, PI, address, phone, timezone, status).
 
 Permissions:
 
-- Admin
+- manage_sites
+
+### POST /api/sites/:id/archive
+
+Archives a site (see `BUSINESS_RULES` — Site Archive, in
+`DATABASE_Part_01_Core_SaaS_Users_Roles_Sites.md`). ClinicalOS never
+hard-deletes a site; this is the only "remove" operation available.
+
+Optional:
+
+- reason (required only when overriding the enrolled-subjects block)
+
+Business Rules:
+
+- Blocked if the site has enrolled subjects, unless the caller holds
+  `force_archive_site`, in which case a `reason` is mandatory.
+- Idempotent — archiving an already-archived site is a no-op.
+
+Permissions:
+
+- manage_sites (+ force_archive_site to override the enrolled-subjects block)
+
+### GET /api/sites/:id/studies
+
+Returns studies assigned to this site.
+
+### GET /api/sites/:id/users
+
+Returns staff (users) assigned to this site, each with their role(s).
 
 ---
 
@@ -210,9 +369,11 @@ Returns studies filtered by company and site access.
 Filters:
 
 - site_id
-- status
+- status (exact match)
 - sponsor
 - therapeutic_area
+- view (`active` | `archived` | `all` — defaults to `active`, which excludes
+  archived studies; an explicit `status` filter takes precedence over `view`)
 
 ### POST /api/studies
 
@@ -222,22 +383,56 @@ Permissions:
 
 - Admin
 
-### POST /api/studies/from-protocol
+### POST /api/studies/ai-drafts
 
-Uploads protocol and starts AI extraction.
+Uploads a protocol PDF and starts AI extraction into a temporary draft. **No `studies` row is
+created by this call** — the extraction lands in `study_drafts` for guided human review.
 
 Flow:
 
 1. Upload protocol file.
-2. Create study draft.
+2. Create `study_drafts` row (`status: 'processing'`).
 3. Run AI Protocol Agent.
-4. Create proposed Study Profile.
-5. Create proposed Visit Template.
-6. Return review payload.
+4. Store the extracted study profile, visit schedule, and confidence/uncertain-fields on the
+   draft (`status: 'ready'`, or `'failed'` with `error_message` if extraction errors out).
+5. Return the draft for the guided review screen.
+
+Permissions:
+
+- create_study
+
+### GET /api/studies/ai-drafts/:id
+
+Fetches an AI draft for review.
+
+Permissions:
+
+- create_study
+
+### DELETE /api/studies/ai-drafts/:id
+
+Discards an AI draft that hasn't been finalized yet.
+
+Permissions:
+
+- create_study
+
+### POST /api/studies/ai-drafts/:id/finalize
+
+Creates the real study from a (possibly edited) AI draft — validated by `finalizeAiDraftSchema`.
+Creates the `studies` row with every submitted field, creates the visit template if any visit
+items were submitted, attaches the originally uploaded protocol PDF under Documents
+(`study_documents`, `document_type: 'protocol'`), and marks the draft `finalized`.
+
+Permissions:
+
+- create_study
 
 ### POST /api/studies/:id/approve-ai-extraction
 
-Approves AI-generated study draft.
+Approves an AI-generated extraction on an **existing** study (protocol amendments — see
+`POST /api/studies/:id/protocol`). Not used by the ai-drafts flow above, which creates the study
+directly on finalize instead of an approve-per-extraction step.
 
 Permissions:
 
@@ -245,11 +440,12 @@ Permissions:
 
 ### PATCH /api/studies/:id
 
-Updates study.
+Updates study fields (name, protocol number, sponsor, CRO, phase,
+therapeutic area, dates).
 
 Permissions:
 
-- Admin
+- edit_study or manage_studies
 
 ### POST /api/studies/:id/close
 
@@ -258,6 +454,39 @@ Closes study.
 Permissions:
 
 - Admin
+
+### POST /api/studies/:id/archive
+
+Archives a study (see Business Rules — Study Archive). ClinicalOS never
+hard-deletes a study; this is the only "remove" operation available.
+
+Optional:
+
+- reason (required only when overriding the enrolled-subjects block)
+
+Business Rules:
+
+- Blocked if the study has enrolled subjects, unless the caller holds
+  `force_archive_study`, in which case a `reason` is mandatory.
+- Idempotent — archiving an already-archived study is a no-op.
+
+Permissions:
+
+- manage_studies (+ force_archive_study to override the enrolled-subjects
+  block)
+
+### GET /api/studies/:id/sites
+
+Returns sites assigned to this study.
+
+### DELETE /api/studies/:id/sites/:siteId
+
+Removes a site assignment from this study. (Assigning a site reuses
+`PATCH /api/studies/:id` with a `site_ids` array — see above.)
+
+Permissions:
+
+- manage_studies
 
 ---
 
@@ -311,30 +540,40 @@ Optional:
 
 - initials
 - screening_date
-- baseline_date
-- randomization_date
+
+`baseline_date` and `randomization_date` are not accepted here — see
+`POST /api/subjects/:id/baseline` and `POST /api/subjects/:id/randomize` below.
 
 Business Rules:
 
 - Validate active study.
 - Validate site is assigned to study.
-- Generate visits if required date exists.
+- Schedule a placeholder Baseline visit from the approved template's `is_baseline` item.
 - Create timeline entry.
 - Create audit log.
 
 ### GET /api/subjects/:id
 
-Returns full subject profile.
+Returns full subject profile (overview tab only by default).
 
 Includes:
 
 - overview
-- visits
+- visits (lazy-loaded — pass `?include=visits` or use dedicated endpoint below)
 - charts
 - timeline
 - notes
 - documents
 - history
+
+### GET /api/subjects/:id/visits
+
+Returns all visits for a subject. Used by the Subject Profile Visits tab.
+
+Filters:
+
+- status
+- date range
 
 ### PATCH /api/subjects/:id
 
@@ -343,6 +582,39 @@ Updates subject.
 ### POST /api/subjects/:id/status
 
 Changes subject status.
+
+### POST /api/subjects/:id/baseline
+
+Completes the Baseline visit.
+
+Required:
+
+- baseline_date
+
+Business Rules:
+
+- Reject if the subject's baseline date is already recorded.
+- Mark the subject's placeholder Baseline visit Completed with this date.
+- Record `baseline_date` on the subject.
+- Generate the remaining scheduled visits from the approved visit template, anchored
+  to `baseline_date`.
+- Create timeline entry and audit log.
+
+### POST /api/subjects/:id/randomize
+
+Records randomization and moves the subject to Randomized status.
+
+Required:
+
+- randomization_number
+- randomization_date
+
+Business Rules:
+
+- Reject if the subject is already randomized.
+- Reject if the subject's current status is not Screening.
+- Record `randomization_number` and `randomization_date`; set status to `randomized`.
+- Write status history, timeline entry, audit log, and PI/CRC notification.
 
 ### POST /api/subjects/:id/notes
 
@@ -535,6 +807,16 @@ Flow:
 6. Calculate expiration.
 7. Create renewal tasks if needed.
 
+### PATCH /api/regulatory/documents/:id
+
+Updates regulatory document metadata (document name, version, effective date, expiration date, document type).
+
+Use case: correcting metadata before or after AI review, without creating a new version.
+
+Permissions:
+
+- Regulatory
+
 ### POST /api/regulatory/documents/:id/archive
 
 Archives document.
@@ -722,7 +1004,46 @@ Audit logs must never be editable.
 
 ---
 
-## 22. Settings API
+## 22. Notifications API
+
+### GET /api/notifications
+
+Returns the current user's notifications, most recent first.
+
+Query filters:
+
+- is_read (true | false)
+- limit (default 50)
+
+### GET /api/notifications/unread-count
+
+Returns the count of unread notifications for the current user.
+
+Response: `{ count: number }`
+
+### PATCH /api/notifications/:id/read
+
+Marks one notification as read.
+
+### POST /api/notifications/mark-all-read
+
+Marks all of the current user's notifications as read.
+
+### GET /api/notifications/preferences
+
+Returns all notification preferences for the current user.
+
+Response: array of `{ event_type, in_app, email }`
+
+### PUT /api/notifications/preferences/:event_type
+
+Updates notification channel preferences for one event type.
+
+Body: `{ in_app: boolean, email: boolean }`
+
+---
+
+## 23. Settings API
 
 ### GET /api/settings
 
@@ -766,6 +1087,7 @@ Do not place business logic directly in React components.
 ## 24. Required Backend Services
 
 - AuthService
+- InvitationService
 - PermissionService
 - SiteAccessService
 - StudyService
@@ -774,10 +1096,11 @@ Do not place business logic directly in React components.
 - ChartService
 - RegulatoryService
 - FileService
-- TaskEngine
+- TaskService
 - BusinessRuleEngine
 - ClinicalIntelligenceService
 - AnalyticsService
+- NotificationService
 - AuditService
 
 ---

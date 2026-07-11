@@ -1,7 +1,9 @@
 # UI/UX 03 - Navigation
 
 ## Universal Search
+
 Search any:
+
 - Subject
 - Study
 - Visit
@@ -10,10 +12,12 @@ Search any:
 - Site
 
 ## Command Palette
+
 Shortcut:
 Ctrl + K
 
 Supports:
+
 - Create Subject
 - Create Study
 - Upload Protocol
@@ -22,6 +26,7 @@ Supports:
 - Open Today's Tasks
 
 ## Quick Create
+
 Floating '+' button.
 
 Allows rapid creation of operational records.

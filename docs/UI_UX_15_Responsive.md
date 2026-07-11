@@ -10,6 +10,7 @@ Mobile:
 Executive dashboards and basic actions only.
 
 Rules:
+
 - Collapsible sidebar
 - Responsive tables
 - Drawer replaces side panels

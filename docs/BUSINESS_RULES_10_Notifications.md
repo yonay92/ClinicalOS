@@ -1,6 +1,7 @@
 # BUSINESS RULES 10 - Notifications
 
 ## Notification Sources
+
 - New Task
 - Expiring Document
 - Sponsor Visit
@@ -10,6 +11,7 @@
 - AI Recommendation
 
 Channels:
+
 - In-App
 - Email
 - Future SMS

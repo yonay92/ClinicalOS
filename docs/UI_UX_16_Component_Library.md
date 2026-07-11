@@ -3,18 +3,21 @@
 Reusable Components
 
 Buttons:
+
 - Primary
 - Secondary
 - Danger
 - Ghost
 
 Inputs:
+
 - Text
 - Select
 - Date
 - Search
 
 Data Components:
+
 - DataTable
 - FilterBar
 - Timeline
@@ -23,6 +26,7 @@ Data Components:
 - PriorityBadge
 
 Feedback:
+
 - Toast
 - Modal
 - Drawer

@@ -1,5 +1,7 @@
 # DATABASE_Part_05.md
+
 # ClinicalOS Database Architecture — Part 05
+
 ## Regulatory, Enterprise Document Center, Business Rules, Clinical Intelligence, Audit Trail
 
 Version: 1.0  
@@ -276,6 +278,8 @@ rule_execution_logs
 - executed_at timestamptz default now()
 ```
 
+**Note:** `BUSINESS_RULE_ENGINE.md §3.2` extends this table with additional operational columns required by the BRE execution model: `trigger_event text`, `conditions_matched boolean`, `actions_executed jsonb`, `error_message text`. The migration for Sprint 9 must include all columns from that document.
+
 ---
 
 # Clinical Intelligence
@@ -293,7 +297,7 @@ ai_agents
 - created_at timestamptz default now()
 ```
 
-### Agent Keys
+### Agent Keys (MVP)
 
 - protocol_agent
 - regulatory_agent
@@ -301,7 +305,8 @@ ai_agents
 - data_agent
 - analytics_agent
 - executive_agent
-- training_agent
+
+**Note:** `training_agent` is excluded from the v1.0 MVP seed data. It must not be inserted into `ai_agents` during initial provisioning. See `AI_PROVIDER_ARCHITECTURE.md §12` and `GAP_ANALYSIS.md GAP-AI-03`.
 
 ---
 

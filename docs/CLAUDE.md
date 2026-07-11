@@ -16,51 +16,51 @@ Center and Analytics.
 
 ## Principles
 
--   Automation First
--   AI Suggests, Humans Approve
--   Business Rules Execute
--   Multi-company SaaS
--   Site-based Security
--   Everything is Auditable
+- Automation First
+- AI Suggests, Humans Approve
+- Business Rules Execute
+- Multi-company SaaS
+- Site-based Security
+- Everything is Auditable
 
 ## Stack
 
--   Next.js
--   React
--   TypeScript
--   Tailwind CSS
--   Supabase
--   PostgreSQL
--   GitHub
--   Vercel
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- Supabase
+- PostgreSQL
+- GitHub
+- Vercel
 
 ## Security
 
--   Row Level Security
--   company_id isolation
--   site_id filtering
--   Secure storage
--   Audit Trail
+- Row Level Security
+- company_id isolation
+- site_id filtering
+- Secure storage
+- Audit Trail
 
 ## Clinical Intelligence
 
--   Protocol Agent
--   Regulatory Agent
--   Subject Agent
--   Data Agent
--   Analytics Agent
--   Executive Agent
--   Training Agent
--   AI Copilot
--   AI Suggestions
+- Protocol Agent
+- Regulatory Agent
+- Subject Agent
+- Data Agent
+- Analytics Agent
+- Executive Agent
+- Training Agent
+- AI Copilot
+- AI Suggestions
 
 ## UX
 
--   Three-click rule
--   Universal Search
--   Command Palette
--   Quick Create
--   Task Center first
+- Three-click rule
+- Universal Search
+- Command Palette
+- Quick Create
+- Task Center first
 
 ## Final Rule
 

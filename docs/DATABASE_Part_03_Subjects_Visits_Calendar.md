@@ -1,5 +1,7 @@
 # DATABASE_Part_03.md
+
 # ClinicalOS Database Architecture — Part 03
+
 ## Subjects, Visits, Calendar, Timelines
 
 Version: 1.0  
@@ -31,6 +33,7 @@ subjects
 - screening_date date
 - baseline_date date
 - randomization_date date
+- randomization_number text
 - end_of_study_date date
 - created_by uuid references profiles(id)
 - created_at timestamptz default now()
@@ -276,8 +279,23 @@ Monitoring/Sponsor/Training = `calendar_events` only.
 ```text
 Subject Created
 → Approved Visit Template Found
-→ Scheduled Visits Generated
+→ Baseline Visit Scheduled (placeholder, no date)
 → Calendar Events Created
+→ Subject Timeline Updated
+```
+
+```text
+Baseline Visit Completed (Baseline Date entered)
+→ Baseline Visit Marked Completed
+→ Remaining Scheduled Visits Generated (anchored to Baseline Date)
+→ Calendar Events Created
+→ Subject Timeline Updated
+```
+
+```text
+Subject Randomized (dedicated Randomize action, Screening status only)
+→ Randomization Number + Date Recorded
+→ Subject Status → Randomized
 → Subject Timeline Updated
 ```
 

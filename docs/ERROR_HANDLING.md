@@ -3,11 +3,13 @@
 # ClinicalOS Error Handling
 
 ## Goals
+
 - User-friendly messages
 - Developer diagnostics
 - Audit critical failures
 
 ## Error Categories
+
 - Validation
 - Authentication
 - Authorization
@@ -18,7 +20,9 @@
 - Network
 
 ## Logging
+
 Every unexpected error logs:
+
 - User
 - Company
 - Site
@@ -27,16 +31,20 @@ Every unexpected error logs:
 - Timestamp
 
 ## User Experience
+
 Never expose raw SQL or stack traces.
 
 Display actionable messages.
 
 ## Retry Strategy
+
 Automatic retry for transient failures:
+
 - AI
 - Notifications
 - Network
 - Queue processing
 
 ## Final Rule
+
 All critical failures are logged and traceable.

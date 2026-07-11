@@ -46,6 +46,10 @@ companies
    |-- business_rules
    |-- files
    |-- audit_logs
+   |-- notifications
+   |-- notification_preferences
+   |-- notification_email_queue
+   |-- user_invitations
 
 profiles
    |
@@ -54,6 +58,9 @@ profiles
    |-- study_staff
    |-- tasks
    |-- audit_logs
+   |-- notifications
+   |-- notification_preferences
+   |-- user_invitations (accepted_by)
 
 sites
    |
@@ -474,6 +481,14 @@ erDiagram
     AI_REQUESTS ||--o{ AI_RESPONSES : produces
 
     PROFILES ||--o{ AUDIT_LOGS : performs
+
+    COMPANIES ||--o{ NOTIFICATIONS : receives
+    PROFILES ||--o{ NOTIFICATIONS : owns
+    COMPANIES ||--o{ NOTIFICATION_PREFERENCES : configures
+    PROFILES ||--o{ NOTIFICATION_PREFERENCES : owns
+    NOTIFICATIONS ||--o{ NOTIFICATION_EMAIL_QUEUE : queues
+    COMPANIES ||--o{ USER_INVITATIONS : issues
+    PROFILES ||--o{ USER_INVITATIONS : invited_by
 ```
 
 ---

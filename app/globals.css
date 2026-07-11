@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+@layer base {
+  html {
+    font-family:
+      'Inter',
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-white text-slate-900;
+  }
+
+  * {
+    @apply border-slate-200;
+  }
+
+  :root {
+    --primary: 37 99 235; /* #2563eb */
+    --primary-foreground: 255 255 255;
+  }
+}

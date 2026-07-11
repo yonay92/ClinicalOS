@@ -67,8 +67,8 @@ Props:
 
 ```ts
 type ButtonProps = {
-  variant?: "primary" | "secondary" | "danger" | "ghost" | "outline" | "icon";
-  size?: "sm" | "md" | "lg";
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline' | 'icon';
+  size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   loading?: boolean;
   children: React.ReactNode;

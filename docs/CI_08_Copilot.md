@@ -1,9 +1,11 @@
 # Clinical Intelligence 08 - Copilot
 
 ## Purpose
+
 Persistent assistant available throughout ClinicalOS.
 
 ### Capabilities
+
 - Answer product questions
 - Explain workflows
 - Locate records
@@ -11,6 +13,7 @@ Persistent assistant available throughout ClinicalOS.
 - Suggest next actions
 
 ### Constraints
+
 - Respects permissions
 - Uses company/site context
 - Never executes destructive actions without confirmation.

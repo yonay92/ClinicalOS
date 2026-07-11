@@ -1,9 +1,11 @@
 # Clinical Intelligence 04 - Subject Agent
 
 ## Goal
+
 Monitor subject progress.
 
 Checks
+
 - Missing milestones
 - Missing visits
 - Timeline inconsistencies
@@ -11,6 +13,7 @@ Checks
 - Lost to follow-up indicators
 
 Suggestions
+
 - Create follow-up task
 - Review chart
 - Notify CRC

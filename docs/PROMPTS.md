@@ -66,14 +66,18 @@ Respect Company, Site, Role and Permission boundaries.
 
 All AI agents should return this structure unless otherwise specified.
 
+`confidence` is a numeric value from 0.0 to 1.0. Do not return string labels ("high"/"medium"/"low") — return a decimal. The service layer maps the numeric value to a display label for the UI (< 0.5 = low, 0.5–0.79 = medium, ≥ 0.8 = high). This value is stored directly in `ai_responses.confidence` (numeric column).
+
 ```json
 {
   "summary": "",
-  "confidence": "high | medium | low",
+  "confidence": 0.85,
+  "confidence_reason": "All required fields found in document with clear source text.",
   "requires_approval": true,
   "extracted_data": {},
   "recommended_actions": [],
   "missing_information": [],
+  "warnings": [],
   "risks": [],
   "source_references": []
 }
@@ -143,11 +147,12 @@ Return structured JSON.
       "window_before": 0,
       "window_after": 0,
       "required": true,
-      "confidence": "high"
+      "confidence": 0.95
     }
   ],
   "required_documents": [],
-  "confidence": "medium",
+  "confidence": 0.7,
+  "confidence_reason": "Visit schedule extracted but some windows were ambiguous.",
   "requires_approval": true
 }
 ```
@@ -202,7 +207,8 @@ Return structured JSON.
   "related_site": null,
   "related_staff": null,
   "recommended_actions": [],
-  "confidence": "high",
+  "confidence": 0.9,
+  "confidence_reason": "Document type and expiration date clearly identified from header.",
   "requires_approval": true
 }
 ```
@@ -249,7 +255,8 @@ Return recommendations only.
   "visit_issues": [],
   "chart_issues": [],
   "recommended_tasks": [],
-  "confidence": "medium",
+  "confidence": 0.75,
+  "confidence_reason": "Timeline consistent; one visit window breach flagged for review.",
   "requires_approval": true
 }
 ```
@@ -296,7 +303,8 @@ Return a sorted queue with priority reasons.
     }
   ],
   "summary": "",
-  "confidence": "high"
+  "confidence": 0.92,
+  "confidence_reason": "Priority ordering based on complete overdue_days and window data."
 }
 ```
 

@@ -1,5 +1,7 @@
 # DATABASE_Part_01.md
+
 # ClinicalOS Database Architecture — Part 01
+
 ## Core SaaS, Users, Roles, Permissions, Sites
 
 Version: 1.0  
@@ -225,6 +227,14 @@ permissions
 - view_all_sites
 - manage_users
 - view_audit_logs
+- force_archive_study — a deliberate override permission (see
+  BUSINESS_RULES_02_Studies.md, Study Archive). Unlike other permissions, it
+  is NOT included in the admin role's default "all permissions" grant
+  (`CompanyService.provision()`, `bootstrap_admin.sql`) — a company owner
+  must consciously enable it per-role from Settings > Roles.
+- force_archive_site — same override pattern as `force_archive_study`,
+  applied to Site Archive (see §10 Site Archive Rule below). Also excluded
+  from the admin default grant.
 
 ---
 
@@ -253,12 +263,14 @@ sites
 - id uuid primary key
 - company_id uuid references companies(id)
 - name text not null
-- site_code text
+- site_code text          -- displayed as "Site Number" in the UI
+- principal_investigator text
 - address text
 - city text
 - state text
 - zip_code text
 - phone text
+- timezone text
 - status text default 'active'
 - created_at timestamptz default now()
 - updated_at timestamptz default now()
@@ -268,7 +280,18 @@ sites
 
 - active
 - inactive
-- closed
+- closed (legacy — the Sites module UI only exposes Active/Inactive/Archived)
+- archived
+
+### Site Archive Rule
+
+Mirrors the Study Archive rule (`BUSINESS_RULES_02_Studies.md`): archiving is
+blocked if the site has one or more enrolled Subjects, unless the caller
+holds `force_archive_site` (not granted to any role by default — enabled
+per-role from Settings > Roles) and supplies a reason. Fully audit logged
+(`site.archived`, including enrolled-subject count, forced flag, reason).
+Archived sites are excluded from the default Sites list; the list's
+Active / Archived / All filter controls visibility.
 
 ---
 
@@ -288,6 +311,14 @@ user_sites
 ### Rule
 
 A user can only access records from sites listed in `user_sites`, unless they have a permission such as `view_all_sites`.
+
+### Bootstrap Rule
+
+When the first site is created for a company, every user holding the `admin`
+role is automatically inserted into `user_sites` for that site (see
+`SiteService.create`). This makes the bootstrap administrator's site access
+explicit and visible in Settings → Users, on top of the `view_all_sites`
+permission bypass admins already have.
 
 ---
 
