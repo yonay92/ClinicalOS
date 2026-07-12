@@ -14,6 +14,7 @@ import { CompanyService } from '@/services/company/CompanyService';
 import { PermissionService } from '@/services/permissions/PermissionService';
 import { AIDraftService } from '@/services/studies/AIDraftService';
 import { SubjectService } from '@/services/subjects/SubjectService';
+import { VisitService } from '@/services/visits/VisitService';
 import { NotFoundError } from '@/lib/api/errors';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -63,6 +64,8 @@ function makeTrackingClient(data: unknown = [], error: unknown = null) {
     or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
     maybeSingle: vi
       .fn()
       .mockResolvedValue({ data: Array.isArray(data) ? (data[0] ?? null) : data, error }),
@@ -339,6 +342,39 @@ describe('SubjectService — company isolation', () => {
         makeCtx(COMPANY_A),
       ),
     ).rejects.toThrow(NotFoundError);
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+});
+
+// ── VisitService ─────────────────────────────────────────────────────────────
+
+describe('VisitService — company isolation', () => {
+  it('confirmVisit() scopes the visit lookup to company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient(null, null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      VisitService.confirmVisit('subject-other-company', 'visit-other-company', makeCtx(COMPANY_A)),
+    ).rejects.toThrow(NotFoundError);
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('listCalendarEvents() scopes the range query to company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await VisitService.listCalendarEvents(
+      { start: '2026-02-01', end: '2026-02-28' },
+      makeCtx(COMPANY_A),
+    );
 
     const companyEq = eqCalls.find(([col]) => col === 'company_id');
     expect(companyEq).toBeDefined();

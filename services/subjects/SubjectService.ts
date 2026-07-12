@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { PermissionService } from '@/services/permissions/PermissionService';
 import { AuditService } from '@/services/audit/AuditService';
 import { NotificationService } from '@/services/notifications/NotificationService';
+import { VisitService } from '@/services/visits/VisitService';
 import { getVisitLockStatus, sortVisitsByOrder } from '@/lib/utils/visitSequencing';
 import {
   NotFoundError,
@@ -23,6 +24,7 @@ import type {
   SubjectDocument,
   SubjectTimelineEvent,
   Visit,
+  VisitStatus,
 } from '@/types/subjects';
 import type { VisitTemplateItem } from '@/types/studies';
 import type { RequestContext } from '@/types/api';
@@ -232,9 +234,6 @@ export const SubjectService = {
       ctx.user.id,
     );
 
-    // BUSINESS_RULES_03 "Create Calendar Events" is deferred — calendar_events ships
-    // in Sprint 4 (Visits & Calendar) alongside the full visit lifecycle.
-    //
     // Baseline is no longer collected at creation — instead, a placeholder visit is
     // scheduled for the template's designated Baseline item now, and completing it
     // (SubjectService.completeBaselineVisit) records baseline_date and generates the
@@ -278,6 +277,13 @@ export const SubjectService = {
       })),
     );
     if (visitError) throw new DatabaseError(visitError.message);
+
+    const { data: createdVisits } = await supabase
+      .from('visits')
+      .select(VISIT_COLUMNS)
+      .eq('subject_id', subject.id)
+      .eq('company_id', ctx.company.id);
+    await VisitService.createCalendarEventsForVisits((createdVisits as Visit[]) ?? [], ctx);
 
     await this.addTimelineEvent(
       subject.id,
@@ -365,46 +371,126 @@ export const SubjectService = {
 
     // Everything at or before Baseline's visit_order already exists as a visit row
     // (created at subject creation — see SubjectService.create) — only generate what's
-    // ordered strictly after Baseline, or those rows would be duplicated.
+    // ordered strictly after Baseline.
     const templateItems = baselineItem
       ? allItems.filter((item) => item.visit_order > baselineItem.visit_order)
       : allItems.filter((item) => !item.is_baseline);
     if (templateItems.length === 0) return [];
 
-    const rows = templateItems.map((item) => {
-      const targetDate = addDaysToDateString(subject.baseline_date as string, item.offset_days);
-      return {
-        company_id: ctx.company.id,
-        site_id: subject.site_id,
-        study_id: subject.study_id,
-        subject_id: subject.id,
-        visit_template_item_id: item.id,
-        visit_name: item.visit_name,
-        visit_type: item.visit_type,
-        target_date: targetDate,
-        window_start: addDaysToDateString(targetDate, -item.window_before),
-        window_end: addDaysToDateString(targetDate, item.window_after),
-        status: 'scheduled',
-        created_by: ctx.user.id,
-      };
-    });
-
-    const { data: inserted, error } = await supabase
+    // Reopening a completed Baseline visit and completing it again (with an edited
+    // date) re-invokes this method — it must recalculate the still-pending downstream
+    // visits it already generated instead of inserting duplicates, and must never
+    // touch a downstream visit that has already occurred.
+    const { data: existingVisits } = await supabase
       .from('visits')
-      .insert(rows)
-      .select(VISIT_COLUMNS);
-    if (error) throw new DatabaseError(error.message);
+      .select(VISIT_COLUMNS)
+      .eq('subject_id', subject.id)
+      .eq('company_id', ctx.company.id)
+      .in(
+        'visit_template_item_id',
+        templateItems.map((item) => item.id),
+      );
 
-    await this.addTimelineEvent(
-      subject.id,
-      ctx.company.id,
-      'visits_generated',
-      new Date().toISOString(),
-      `${rows.length} scheduled visit(s) generated from the approved visit template`,
-      ctx.user.id,
+    const existingByItemId = new Map(
+      ((existingVisits as Visit[]) ?? []).map((v) => [v.visit_template_item_id, v]),
     );
+    const OCCURRED_STATUSES: VisitStatus[] = ['completed', 'cancelled', 'out_of_window', 'missed'];
 
-    return (inserted as Visit[]) ?? [];
+    const rowsToInsert: Array<Record<string, unknown>> = [];
+    const toRecalculate: Array<{
+      id: string;
+      target_date: string;
+      window_start: string;
+      window_end: string;
+    }> = [];
+
+    for (const item of templateItems) {
+      const targetDate = addDaysToDateString(subject.baseline_date as string, item.offset_days);
+      const windowStart = addDaysToDateString(targetDate, -item.window_before);
+      const windowEnd = addDaysToDateString(targetDate, item.window_after);
+      const existing = existingByItemId.get(item.id);
+
+      if (!existing) {
+        rowsToInsert.push({
+          company_id: ctx.company.id,
+          site_id: subject.site_id,
+          study_id: subject.study_id,
+          subject_id: subject.id,
+          visit_template_item_id: item.id,
+          visit_name: item.visit_name,
+          visit_type: item.visit_type,
+          target_date: targetDate,
+          window_start: windowStart,
+          window_end: windowEnd,
+          status: 'scheduled',
+          created_by: ctx.user.id,
+        });
+      } else if (!OCCURRED_STATUSES.includes(existing.status)) {
+        toRecalculate.push({
+          id: existing.id,
+          target_date: targetDate,
+          window_start: windowStart,
+          window_end: windowEnd,
+        });
+      }
+      // else: already completed/cancelled/out_of_window/missed — it occurred (or was
+      // resolved) on its original date and is never moved by a later recalculation.
+    }
+
+    const touched: Visit[] = [];
+
+    if (rowsToInsert.length > 0) {
+      const { data: inserted, error } = await supabase
+        .from('visits')
+        .insert(rowsToInsert)
+        .select(VISIT_COLUMNS);
+      if (error) throw new DatabaseError(error.message);
+      touched.push(...((inserted as Visit[]) ?? []));
+      await VisitService.createCalendarEventsForVisits((inserted as Visit[]) ?? [], ctx);
+    }
+
+    for (const recalc of toRecalculate) {
+      const { data: updated, error } = await supabase
+        .from('visits')
+        .update({
+          target_date: recalc.target_date,
+          window_start: recalc.window_start,
+          window_end: recalc.window_end,
+        })
+        .eq('id', recalc.id)
+        .eq('company_id', ctx.company.id)
+        .select(VISIT_COLUMNS)
+        .single();
+      if (error) throw new DatabaseError(error.message);
+      if (updated) touched.push(updated as Visit);
+
+      await supabase
+        .from('calendar_events')
+        .update({
+          start_datetime: `${recalc.target_date}T00:00:00Z`,
+          end_datetime: `${recalc.target_date}T00:00:00Z`,
+        })
+        .eq('related_record_type', 'visits')
+        .eq('related_record_id', recalc.id)
+        .eq('company_id', ctx.company.id);
+    }
+
+    if (touched.length > 0) {
+      const parts = [
+        rowsToInsert.length > 0 ? `${rowsToInsert.length} visit(s) generated` : null,
+        toRecalculate.length > 0 ? `${toRecalculate.length} visit(s) recalculated` : null,
+      ].filter(Boolean);
+      await this.addTimelineEvent(
+        subject.id,
+        ctx.company.id,
+        'visits_generated',
+        new Date().toISOString(),
+        `${parts.join(', ')} from the approved visit template`,
+        ctx.user.id,
+      );
+    }
+
+    return touched;
   },
 
   // Fetches the subject's approved template items and all of its current visit rows —
@@ -454,10 +540,6 @@ export const SubjectService = {
 
     const subject = await this.getById(subjectId, ctx);
 
-    if (subject.baseline_date) {
-      throw new BusinessRuleError('Baseline visit has already been completed for this subject');
-    }
-
     const { templateItems, allVisits } = await this.getVisitScheduleContext(subject, ctx);
     const baselineItem = templateItems.find((i) => i.is_baseline);
 
@@ -473,6 +555,18 @@ export const SubjectService = {
 
     if (!baselineVisit) {
       throw new NotFoundError('Baseline visit');
+    }
+
+    // Sprint 4 visit state machine: Complete is only allowed from In Progress —
+    // the Baseline visit must go through Confirm → Start like any other visit
+    // before it can be completed here. This is the SOLE completion guard — it
+    // deliberately does not also check subject.baseline_date, since that would
+    // permanently block re-completion after a legitimate Reopen (Completed ->
+    // In Progress) even though the visit's own status correctly allows it again.
+    if (baselineVisit.status !== 'in_progress') {
+      throw new BusinessRuleError(
+        `Only an In Progress visit can be completed (current status: ${baselineVisit.status}). Confirm and start this visit first.`,
+      );
     }
 
     const lockStatus = getVisitLockStatus(baselineVisit, allVisits, templateItems);
@@ -495,6 +589,14 @@ export const SubjectService = {
       .eq('company_id', ctx.company.id);
 
     if (visitError) throw new DatabaseError(visitError.message);
+
+    await supabase.from('visit_history').insert({
+      company_id: ctx.company.id,
+      visit_id: baselineVisit.id,
+      old_status: baselineVisit.status,
+      new_status: 'completed',
+      changed_by: ctx.user.id,
+    });
 
     const { data: updated, error } = await supabase
       .from('subjects')
@@ -564,6 +666,15 @@ export const SubjectService = {
       throw new BusinessRuleError('Visit has already been completed');
     }
 
+    // Sprint 4 visit state machine: Complete is only allowed from In Progress —
+    // this tightens the previously accepted scheduled/confirmed/in_progress/
+    // rescheduled range down to a single required precondition.
+    if (visit.status !== 'in_progress') {
+      throw new BusinessRuleError(
+        `Only an In Progress visit can be completed (current status: ${visit.status}). Confirm and start this visit first.`,
+      );
+    }
+
     const { templateItems, allVisits } = await this.getVisitScheduleContext(subject, ctx);
     const item = templateItems.find((i) => i.id === visit.visit_template_item_id);
 
@@ -587,6 +698,14 @@ export const SubjectService = {
     if (updateError || !updated) {
       throw new DatabaseError(updateError?.message ?? 'Failed to complete visit');
     }
+
+    await supabase.from('visit_history').insert({
+      company_id: ctx.company.id,
+      visit_id: visitId,
+      old_status: visit.status,
+      new_status: 'completed',
+      changed_by: ctx.user.id,
+    });
 
     await this.addTimelineEvent(
       subjectId,

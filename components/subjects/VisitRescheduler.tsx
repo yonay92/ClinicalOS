@@ -4,55 +4,48 @@ import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import type { VisitLockStatus } from '@/lib/utils/visitSequencing';
 import type { Visit } from '@/types/subjects';
 
-export function VisitCompleter({
+export function VisitRescheduler({
   subjectId,
   visit,
-  lockStatus,
   onChanged,
 }: {
   subjectId: string;
   visit: Visit;
-  lockStatus: VisitLockStatus;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [scheduledDate, setScheduledDate] = useState('');
+  const [targetDate, setTargetDate] = useState('');
+  const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sprint 4 visit state machine: Complete is only allowed from In Progress —
-  // the visit must be Confirmed then Started first.
-  if (visit.status !== 'in_progress') return null;
-
-  if (lockStatus.locked) {
-    return (
-      <div className="text-xs text-gray-500">
-        <span className="font-medium text-gray-600">Locked</span> — {lockStatus.reason}
-      </div>
-    );
-  }
+  if (visit.status !== 'scheduled' && visit.status !== 'confirmed') return null;
 
   function openModal() {
-    setScheduledDate('');
+    setTargetDate(visit.target_date ?? '');
+    setReason('');
     setError(null);
     setOpen(true);
   }
 
   async function handleSubmit() {
-    if (!scheduledDate) {
-      setError('Completion date is required');
+    if (!targetDate) {
+      setError('A new date is required');
+      return;
+    }
+    if (!reason.trim()) {
+      setError('A reason is required');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/subjects/${subjectId}/visits/${visit.id}/complete`, {
+      const res = await fetch(`/api/subjects/${subjectId}/visits/${visit.id}/reschedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scheduled_date: scheduledDate }),
+        body: JSON.stringify({ target_date: targetDate, reason: reason.trim() }),
       });
       const json = (await res.json()) as {
         success: boolean;
@@ -60,7 +53,7 @@ export function VisitCompleter({
         error?: { code: string; message: string };
       };
       if (!res.ok || !json.success) {
-        setError(json.error?.message ?? json.message ?? 'Failed to complete visit');
+        setError(json.error?.message ?? json.message ?? 'Failed to reschedule visit');
         return;
       }
       setOpen(false);
@@ -75,18 +68,31 @@ export function VisitCompleter({
   return (
     <>
       <Button size="sm" variant="outline" onClick={openModal}>
-        Complete
+        Reschedule
       </Button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={`Complete ${visit.visit_name}`}>
+      <Modal open={open} onClose={() => setOpen(false)} title={`Reschedule ${visit.visit_name}`}>
         <div className="space-y-4">
           <Input
-            label="Completion date"
+            label="New target date"
             type="date"
-            value={scheduledDate}
-            onChange={(e) => setScheduledDate(e.target.value)}
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
             required
           />
+          <div className="space-y-1">
+            <label htmlFor="reschedule-reason" className="block text-sm font-medium text-slate-700">
+              Reason
+            </label>
+            <textarea
+              id="reschedule-reason"
+              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Required — why is this visit being rescheduled?"
+            />
+          </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => setOpen(false)}>

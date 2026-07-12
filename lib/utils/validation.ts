@@ -310,6 +310,53 @@ export const addSubjectNoteSchema = z.object({
 
 export type AddSubjectNoteSchema = z.infer<typeof addSubjectNoteSchema>;
 
+// ── Visits ────────────────────────────────────────────────────────────────────
+
+export const confirmVisitSchema = z.object({});
+
+export type ConfirmVisitSchema = z.infer<typeof confirmVisitSchema>;
+
+export const startVisitSchema = z.object({});
+
+export type StartVisitSchema = z.infer<typeof startVisitSchema>;
+
+export const rescheduleVisitSchema = z.object({
+  target_date: z.string().date(),
+  reason: z.string().min(1, 'A reason is required'),
+});
+
+export type RescheduleVisitSchema = z.infer<typeof rescheduleVisitSchema>;
+
+export const cancelVisitSchema = z.object({
+  reason: z.string().min(1, 'A reason is required'),
+});
+
+export type CancelVisitSchema = z.infer<typeof cancelVisitSchema>;
+
+export const reopenVisitSchema = z.object({
+  reason: z.string().min(1, 'A reason is required'),
+});
+
+export type ReopenVisitSchema = z.infer<typeof reopenVisitSchema>;
+
+export const createUnscheduledVisitSchema = z.object({
+  visit_name: z.string().min(1, 'Visit name is required').max(200).trim(),
+  target_date: z.string().date(),
+  notes: z.string().max(1000).trim().optional(),
+});
+
+export type CreateUnscheduledVisitSchema = z.infer<typeof createUnscheduledVisitSchema>;
+
+// ── Calendar ──────────────────────────────────────────────────────────────────
+
+export const listCalendarEventsSchema = z.object({
+  start: z.string().date(),
+  end: z.string().date(),
+  site_id: z.string().uuid().optional(),
+});
+
+export type ListCalendarEventsSchema = z.infer<typeof listCalendarEventsSchema>;
+
 export const listSubjectsSchema = z.object({
   study_id: z.string().uuid().optional(),
   site_id: z.string().uuid().optional(),

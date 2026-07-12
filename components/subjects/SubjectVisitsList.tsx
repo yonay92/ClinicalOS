@@ -4,7 +4,12 @@ import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { classifyVisit, type VisitScheduleBucket } from '@/lib/utils/visitStatus';
 import { getVisitLockStatus, sortVisitsByOrder } from '@/lib/utils/visitSequencing';
+import { VisitConfirmer } from '@/components/subjects/VisitConfirmer';
+import { VisitStarter } from '@/components/subjects/VisitStarter';
 import { VisitCompleter } from '@/components/subjects/VisitCompleter';
+import { VisitRescheduler } from '@/components/subjects/VisitRescheduler';
+import { VisitCanceller } from '@/components/subjects/VisitCanceller';
+import { VisitReopener } from '@/components/subjects/VisitReopener';
 import type { Visit, VisitStatus } from '@/types/subjects';
 import type { VisitTemplateItem } from '@/types/studies';
 
@@ -82,6 +87,8 @@ export function SubjectVisitsList({
           {orderedVisits.map((visit) => {
             const bucket = classifyVisit(visit);
             const lockStatus = getVisitLockStatus(visit, orderedVisits, templateItems);
+            const item = templateItems.find((i) => i.id === visit.visit_template_item_id);
+            const isBaseline = item?.is_baseline ?? false;
             return (
               <tr key={visit.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-900">{visit.visit_name}</td>
@@ -105,13 +112,23 @@ export function SubjectVisitsList({
                     '—'
                   )}
                 </td>
-                <td className="px-4 py-3">
-                  <VisitCompleter
-                    subjectId={subjectId}
-                    visit={visit}
-                    lockStatus={lockStatus}
-                    onChanged={onChanged}
-                  />
+                <td className="space-y-1 px-4 py-3">
+                  <VisitConfirmer subjectId={subjectId} visit={visit} onChanged={onChanged} />
+                  <VisitStarter subjectId={subjectId} visit={visit} onChanged={onChanged} />
+                  {/* Baseline's Complete goes through the dedicated header action
+                      (SubjectBaselineCompleter) — completeVisit() rejects is_baseline
+                      visits, so no per-row Complete button is shown for that row. */}
+                  {!isBaseline && (
+                    <VisitCompleter
+                      subjectId={subjectId}
+                      visit={visit}
+                      lockStatus={lockStatus}
+                      onChanged={onChanged}
+                    />
+                  )}
+                  <VisitRescheduler subjectId={subjectId} visit={visit} onChanged={onChanged} />
+                  <VisitCanceller subjectId={subjectId} visit={visit} onChanged={onChanged} />
+                  <VisitReopener subjectId={subjectId} visit={visit} onChanged={onChanged} />
                 </td>
               </tr>
             );
