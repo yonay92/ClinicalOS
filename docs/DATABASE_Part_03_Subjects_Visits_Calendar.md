@@ -306,10 +306,11 @@ subject_contact_info
 ### Rule
 
 Gated by `view_subject_phi` (SELECT) / `edit_subject_phi` (INSERT, UPDATE) — separate from
-`view_subjects` / `edit_subject`, and not included in the Administrator role's default
-permission grant (see §8 permissions in DATABASE_Part_01, force_archive_study override
-pattern). Saving the first contact info for a subject auto-generates `subjects.initials`
-if not already set.
+`view_subjects` / `edit_subject`. Included in the Administrator role's default permission
+grant since migration 013 (product decision — every other role still requires a conscious
+per-role grant via Settings > Roles, the same override mechanism `force_archive_study` uses;
+see §8 permissions in DATABASE_Part_01). Saving the first contact info for a subject
+auto-generates `subjects.initials` if not already set.
 
 ---
 

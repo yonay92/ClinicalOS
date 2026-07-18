@@ -42,7 +42,7 @@ const CONTACT = {
 let subjectId = '';
 
 test.describe.serial('PHI Contact Info + Appointment Confirmation', () => {
-  test.describe('Create subject (admin, no PHI grant)', () => {
+  test.describe('Create subject (admin — Administrator includes PHI by default)', () => {
     test.use({ storageState: ADMIN_STATE });
 
     test('creates a subject against the seeded active study', async ({ page }) => {
@@ -70,16 +70,18 @@ test.describe.serial('PHI Contact Info + Appointment Confirmation', () => {
       expect(subjectId).toMatch(/^[0-9a-f-]{36}$/);
     });
 
-    test('does not see the Contact Info tab content by default (no view_subject_phi grant)', async ({
+    test('sees the Contact Info tab by default (Administrator includes view_subject_phi/edit_subject_phi — migration 013)', async ({
       page,
     }) => {
-      // Runs before any contact info exists — this only proves the permission
-      // gate itself (Restricted, not an edit form); the no-PHI persona's tests
-      // below re-check this once there is real PHI on the subject to leak.
+      // Runs before any contact info exists, so this only proves the
+      // permission gate lets Administrator through to the edit form rather
+      // than showing Restricted — the no-PHI persona's tests below prove the
+      // gate still blocks a role that was never granted it.
       await page.goto(`/subjects/${subjectId}`);
       await page.getByRole('button', { name: 'Contact Info' }).click();
 
-      await expect(page.getByRole('heading', { name: 'Restricted' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Add Contact Information' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Restricted' })).not.toBeVisible();
     });
 
     // Prerequisite scaffolding, not the feature under test — driven through the

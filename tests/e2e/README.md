@@ -25,13 +25,16 @@ Runs once before the whole suite (`playwright.config.ts` → `globalSetup`):
 
 1. **Identity fixtures** (`helpers/seed.ts`, idempotent — find-or-create,
    safe to run every invocation without accumulating duplicates): a dedicated
-   company ("ClinicalOS E2E Tests"), one site, and three roles that differ
-   only in whether they hold `view_subject_phi` / `edit_subject_phi`:
+   company ("ClinicalOS E2E Tests"), one site, and three roles:
    - `e2e_admin` — every permission except the standard deliberate-override
-     exclusions (`force_archive_*`, `reopen_visit`, `view_subject_phi`,
-     `edit_subject_phi`) — mirrors a real bootstrapped Administrator.
-   - `e2e_phi` — base subject/visit read access + both PHI permissions.
-   - `e2e_nophi` — the same base access, deliberately without PHI.
+     exclusions (`force_archive_*`, `reopen_visit`) — mirrors a real
+     bootstrapped Administrator, which includes `view_subject_phi` /
+     `edit_subject_phi` by default since migration 013 (product decision).
+   - `e2e_phi` — base subject/visit read access + both PHI permissions,
+     granted the same way a company owner would grant them to a non-admin
+     role via Settings > Roles.
+   - `e2e_nophi` — the same base access, deliberately without PHI — proves
+     the gate still blocks a role that was never granted it.
 
    One user per role (`e2e-admin@clinicalos-e2e.test`, etc., password in
    `E2E_PASSWORD`). All three roles are granted `view_all_sites`, so no

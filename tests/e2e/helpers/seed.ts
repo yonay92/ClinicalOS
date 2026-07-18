@@ -89,14 +89,14 @@ async function loadPermissionMap(
 
 // Mirrors CompanyService.provision()'s ADMIN_EXCLUDED_PERMISSIONS — e2e_admin
 // gets every permission except the deliberate per-role overrides, same as a
-// real bootstrapped Administrator. This is also what makes e2e_admin a valid
-// secondary "no PHI by default, even for an otherwise broad role" check.
+// real bootstrapped Administrator. view_subject_phi/edit_subject_phi are NOT
+// excluded here (migration 013) — Administrator gets PHI access by default;
+// e2e_phi/e2e_nophi below are what exercise the "other roles still require a
+// conscious per-role grant" path.
 const ADMIN_EXCLUDED_PERMISSIONS = new Set([
   'force_archive_study',
   'force_archive_site',
   'reopen_visit',
-  'view_subject_phi',
-  'edit_subject_phi',
 ]);
 
 const BASE_ACCESS_PERMISSIONS = [

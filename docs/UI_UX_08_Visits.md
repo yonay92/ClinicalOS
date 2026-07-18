@@ -61,8 +61,9 @@ Opened by clicking any calendar event:
 
 Shown in the detail panel between the visit fields and the lifecycle actions, gated by the same
 `view_subject_phi` / `edit_subject_phi` permissions as the Subject Profile's Contact Info tab
-(§UI_UX_07_Subjects.md). Renders nothing for a caller without `view_subject_phi` — same silent
-self-gate convention as Reopen.
+(§UI_UX_07_Subjects.md — Administrator has both by default since migration 013; every other role
+needs a conscious per-role grant). Renders nothing for a caller without `view_subject_phi` — same
+silent self-gate convention as Reopen.
 
 - Name, primary phone, email, and voicemail permission, plus Call/Email/Copy-phone-number
   shortcuts
