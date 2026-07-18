@@ -5,14 +5,16 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { VisitLockStatus } from '@/lib/utils/visitSequencing';
-import type { Subject } from '@/types/subjects';
+import type { Subject, Visit } from '@/types/subjects';
 
 export function SubjectBaselineCompleter({
   subject,
+  baselineVisit,
   lockStatus,
   onChanged,
 }: {
   subject: Subject;
+  baselineVisit: Visit | undefined;
   lockStatus: VisitLockStatus;
   onChanged: () => void;
 }) {
@@ -22,6 +24,17 @@ export function SubjectBaselineCompleter({
   const [error, setError] = useState<string | null>(null);
 
   if (subject.baseline_date) return null;
+
+  // Sprint 4 visit state machine: Complete is only allowed from In Progress —
+  // the Baseline visit must be Confirmed then Started first (via the Visits tab)
+  // before this action becomes available.
+  if (baselineVisit && baselineVisit.status !== 'in_progress') {
+    return (
+      <div className="text-xs text-gray-500">
+        Confirm and start the Baseline visit (Visits tab) before completing it
+      </div>
+    );
+  }
 
   if (lockStatus.locked) {
     return (

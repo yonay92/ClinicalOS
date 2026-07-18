@@ -4,6 +4,9 @@ const isCI = !!process.env.CI;
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // Provisions the PHI Contact Info / Appointment Confirmation e2e fixtures
+  // (company, roles, users, study) once per run — see tests/e2e/global-setup.ts.
+  globalSetup: require.resolve('./tests/e2e/global-setup'),
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,

@@ -14,6 +14,7 @@ import { CompanyService } from '@/services/company/CompanyService';
 import { PermissionService } from '@/services/permissions/PermissionService';
 import { AIDraftService } from '@/services/studies/AIDraftService';
 import { SubjectService } from '@/services/subjects/SubjectService';
+import { VisitService } from '@/services/visits/VisitService';
 import { NotFoundError } from '@/lib/api/errors';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -63,6 +64,8 @@ function makeTrackingClient(data: unknown = [], error: unknown = null) {
     or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
     maybeSingle: vi
       .fn()
       .mockResolvedValue({ data: Array.isArray(data) ? (data[0] ?? null) : data, error }),
@@ -343,6 +346,76 @@ describe('SubjectService — company isolation', () => {
     const companyEq = eqCalls.find(([col]) => col === 'company_id');
     expect(companyEq).toBeDefined();
     expect(companyEq![1]).toBe(COMPANY_A);
+  });
+});
+
+// ── VisitService ─────────────────────────────────────────────────────────────
+
+describe('VisitService — company isolation', () => {
+  it('confirmVisit() scopes the visit lookup to company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient(null, null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      VisitService.confirmVisit('subject-other-company', 'visit-other-company', makeCtx(COMPANY_A)),
+    ).rejects.toThrow(NotFoundError);
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('listCalendarEvents() scopes the range query to company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await VisitService.listCalendarEvents(
+      { start: '2026-02-01', end: '2026-02-28' },
+      makeCtx(COMPANY_A),
+    );
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('listCalendarEvents() with a study_id filter scopes the visit-id resolution to company_id too, not just the final query', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await VisitService.listCalendarEvents(
+      { start: '2026-02-01', end: '2026-02-28', study_id: 'study-x' },
+      makeCtx(COMPANY_A),
+    );
+
+    // Study/CRC filters resolve through a separate `visits` (and, for CRC,
+    // `study_staff`) query before narrowing calendar_events — every one of
+    // those must stay scoped to the caller's company, not just the final read.
+    const companyEqCalls = eqCalls.filter(([col]) => col === 'company_id');
+    expect(companyEqCalls.length).toBeGreaterThanOrEqual(2);
+    for (const call of companyEqCalls) {
+      expect(call[1]).toBe(COMPANY_A);
+    }
+  });
+
+  it('listCalendarEvents() with a crc_user_id filter scopes the study_staff lookup to company_id', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await VisitService.listCalendarEvents(
+      { start: '2026-02-01', end: '2026-02-28', crc_user_id: 'user-x' },
+      makeCtx(COMPANY_A),
+    );
+
+    const companyEqCalls = eqCalls.filter(([col]) => col === 'company_id');
+    expect(companyEqCalls.length).toBeGreaterThanOrEqual(2);
+    for (const call of companyEqCalls) {
+      expect(call[1]).toBe(COMPANY_A);
+    }
   });
 });
 

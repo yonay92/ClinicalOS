@@ -7,13 +7,6 @@ import { Input } from '@/components/ui/Input';
 import type { VisitLockStatus } from '@/lib/utils/visitSequencing';
 import type { Visit } from '@/types/subjects';
 
-const PENDING_STATUSES: Visit['status'][] = [
-  'scheduled',
-  'confirmed',
-  'in_progress',
-  'rescheduled',
-];
-
 export function VisitCompleter({
   subjectId,
   visit,
@@ -30,7 +23,9 @@ export function VisitCompleter({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!PENDING_STATUSES.includes(visit.status)) return null;
+  // Sprint 4 visit state machine: Complete is only allowed from In Progress —
+  // the visit must be Confirmed then Started first.
+  if (visit.status !== 'in_progress') return null;
 
   if (lockStatus.locked) {
     return (

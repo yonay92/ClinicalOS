@@ -12,10 +12,13 @@ type RoleWithPermissions = Role & {
   permissions: string[];
 };
 
-// Dangerous-operation overrides (see PermissionService.guardDangerousOperation) —
-// never granted to any role by default; a company owner must consciously enable
-// each one per-role here. Add future overrides (e.g. force_* for other modules)
-// to this list rather than building bespoke UI per permission.
+// Dangerous-operation / sensitive-data overrides (see
+// PermissionService.guardDangerousOperation) — a company owner must
+// consciously enable each one per-role here. Most are never granted to any
+// role by default; view_subject_phi/edit_subject_phi are the exception —
+// they're part of the Administrator role's default grant (migration 013).
+// Add future overrides to this list rather than building bespoke UI per
+// permission.
 const OVERRIDE_PERMISSIONS: Array<{ key: string; label: string; description: string }> = [
   {
     key: 'force_archive_study',
@@ -26,6 +29,18 @@ const OVERRIDE_PERMISSIONS: Array<{ key: string; label: string; description: str
     key: 'force_archive_site',
     label: 'Force Archive Site',
     description: 'archive a site that still has enrolled subjects, bypassing the normal block',
+  },
+  {
+    key: 'view_subject_phi',
+    label: 'View Subject PHI',
+    description:
+      'view subject contact information (name, DOB, phone, email) and appointment confirmation details',
+  },
+  {
+    key: 'edit_subject_phi',
+    label: 'Edit Subject PHI',
+    description:
+      'edit subject contact information and log appointment confirmation contact attempts',
   },
 ];
 
@@ -185,7 +200,7 @@ export default function RolesSettingsPage() {
                         />
                         <span>
                           <span className="font-medium">{override.label}</span> — lets this role{' '}
-                          {override.description}. Not granted to any role by default.
+                          {override.description}.
                         </span>
                       </label>
                     ))}

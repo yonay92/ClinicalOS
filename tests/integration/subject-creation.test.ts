@@ -174,6 +174,7 @@ describe('Approved visit template gate blocks subject creation (GAP-REQ-03)', ()
       { data: null }, // subject_timeline insert (subject_created)
       { data: [baselineItem] }, // visit_template_items (all, ordered)
       { data: null }, // visits insert (Baseline placeholder)
+      { data: [{ ...subjectRow, visit_name: 'Baseline', target_date: null }] }, // visits select (createdVisits refetch for calendar events)
       { data: null }, // subject_timeline insert (baseline_visit_scheduled)
     );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);

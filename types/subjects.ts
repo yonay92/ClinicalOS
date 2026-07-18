@@ -119,6 +119,44 @@ export type SubjectTimelineEvent = {
   created_at: string;
 };
 
+export type PreferredContactMethod = 'phone' | 'email' | 'sms';
+
+export type SubjectContactInfo = {
+  id: string;
+  company_id: string;
+  site_id: string;
+  subject_id: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string;
+  sex: string;
+  phone_primary: string;
+  phone_secondary: string | null;
+  email: string | null;
+  preferred_language: string;
+  preferred_contact_method: PreferredContactMethod;
+  voicemail_permission: boolean;
+  best_time_to_contact: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UpsertSubjectContactInfoInput = {
+  first_name: string;
+  last_name: string;
+  date_of_birth: string;
+  sex: string;
+  phone_primary: string;
+  phone_secondary?: string | undefined;
+  email?: string | undefined;
+  preferred_language: string;
+  preferred_contact_method: PreferredContactMethod;
+  voicemail_permission: boolean;
+  best_time_to_contact?: string | undefined;
+};
+
 export type VisitType = 'scheduled' | 'unscheduled';
 
 export type VisitStatus =

@@ -75,6 +75,7 @@ export function SubjectProfileHeader({
           <div className="flex items-center gap-2">
             <SubjectBaselineCompleter
               subject={subject}
+              baselineVisit={baselineVisit}
               lockStatus={baselineLockStatus}
               onChanged={onChanged}
             />
