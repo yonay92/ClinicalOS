@@ -2,26 +2,24 @@
 
 import { startOfWeek, endOfWeek, eachDayOfInterval, isToday, format } from 'date-fns';
 import { CalendarEventChip } from '@/components/calendar/CalendarEventChip';
+import { groupEventsByDay } from '@/lib/utils/calendarGrouping';
 import type { CalendarEvent } from '@/types/calendar';
 
 export function WeekView({
   week,
   events,
   onSelectEvent,
+  siteNames,
+  studyNames,
 }: {
   week: Date;
   events: CalendarEvent[];
   onSelectEvent: (event: CalendarEvent) => void;
+  siteNames: Map<string, string>;
+  studyNames: Map<string, string>;
 }) {
   const days = eachDayOfInterval({ start: startOfWeek(week), end: endOfWeek(week) });
-
-  const eventsByDay = new Map<string, CalendarEvent[]>();
-  for (const event of events) {
-    const key = event.start_datetime.slice(0, 10);
-    const list = eventsByDay.get(key) ?? [];
-    list.push(event);
-    eventsByDay.set(key, list);
-  }
+  const eventsByDay = groupEventsByDay(events);
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -47,6 +45,10 @@ export function WeekView({
                     key={event.id}
                     event={event}
                     onClick={() => onSelectEvent(event)}
+                    siteName={siteNames.get(event.site_id)}
+                    studyName={
+                      event.related_study_id ? studyNames.get(event.related_study_id) : undefined
+                    }
                   />
                 ))}
               </div>

@@ -42,3 +42,49 @@ export type CreateUnscheduledVisitInput = {
   target_date: string;
   notes?: string | undefined;
 };
+
+// ── Appointment Confirmation ─────────────────────────────────────────────────
+// Tracked independently from VisitStatus — contacting a patient must never
+// change visits.status, and confirming an appointment must never auto-start it.
+
+export type AppointmentConfirmationStatus =
+  | 'not_contacted'
+  | 'attempted'
+  | 'confirmed'
+  | 'left_voicemail'
+  | 'requested_reschedule'
+  | 'unable_to_reach';
+
+export type AppointmentConfirmation = {
+  id: string;
+  company_id: string;
+  site_id: string;
+  visit_id: string;
+  confirmation_status: AppointmentConfirmationStatus;
+  last_contacted_at: string | null;
+  last_contacted_by: string | null;
+  contact_attempt_count: number;
+  contact_notes: string | null;
+  next_contact_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LogContactAttemptInput = {
+  confirmation_status: AppointmentConfirmationStatus;
+  contact_method?: 'phone' | 'email' | undefined;
+  notes?: string | undefined;
+  next_contact_at?: string | undefined;
+};
+
+export type AppointmentConfirmationLogEntry = {
+  id: string;
+  company_id: string;
+  visit_id: string;
+  contact_method: string | null;
+  old_status: string | null;
+  new_status: string;
+  notes: string | null;
+  contacted_by: string | null;
+  contacted_at: string;
+};

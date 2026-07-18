@@ -61,4 +61,6 @@ export type PermissionKey =
   | 'view_analytics'
   | 'force_archive_study'
   | 'force_archive_site'
-  | 'reopen_visit';
+  | 'reopen_visit'
+  | 'view_subject_phi'
+  | 'edit_subject_phi';

@@ -1,0 +1,276 @@
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+
+/**
+ * Provisions the fixed, reusable identity fixtures for the PHI Contact Info +
+ * Appointment Confirmation e2e suite: a dedicated company, three roles that
+ * differ only in whether they hold view_subject_phi/edit_subject_phi, and one
+ * user per role. Everything here is idempotent (find-or-create, keyed by
+ * unique name/email) — safe to run before every test invocation without
+ * accumulating duplicate companies/roles/users across runs.
+ *
+ * Site/study/visit-template/subject scaffolding is intentionally NOT handled
+ * here — see tests/e2e/global-setup.ts, which creates a fresh study every run
+ * (via the real API, not raw SQL) so each run always has a clean, subject-free
+ * active study.
+ */
+
+const COMPANY_NAME = 'ClinicalOS E2E Tests';
+const SITE_NAME = 'E2E Test Site';
+
+// Fixed test-only credential for a dedicated, disposable e2e Supabase project
+// (never a shared/prod one — see tests/e2e/README.md). Not read from env: the
+// module importing this runs before global-setup's loadEnvLocal() call, so an
+// env override here would silently never apply.
+export const E2E_PASSWORD = 'E2eTestPass!2024';
+
+export const E2E_USERS = {
+  admin: { email: 'e2e-admin@clinicalos-e2e.test', roleKey: 'e2e_admin' },
+  phi: { email: 'e2e-phi@clinicalos-e2e.test', roleKey: 'e2e_phi' },
+  nophi: { email: 'e2e-nophi@clinicalos-e2e.test', roleKey: 'e2e_nophi' },
+} as const;
+
+export type E2EPersona = keyof typeof E2E_USERS;
+
+export type E2EIdentityFixtures = {
+  companyId: string;
+  siteId: string;
+  siteName: string;
+  users: Record<E2EPersona, { userId: string; email: string; password: string }>;
+};
+
+async function findOrCreateCompany(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+): Promise<string> {
+  const { data: existing } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('name', COMPANY_NAME)
+    .maybeSingle();
+  if (existing) return (existing as { id: string }).id;
+
+  const { data: created, error } = await supabase
+    .from('companies')
+    .insert({ name: COMPANY_NAME, legal_name: COMPANY_NAME, status: 'active' })
+    .select('id')
+    .single();
+  if (error || !created) throw new Error(`Failed to create e2e company: ${error?.message}`);
+  return (created as { id: string }).id;
+}
+
+async function findOrCreateSite(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  companyId: string,
+): Promise<string> {
+  const { data: existing } = await supabase
+    .from('sites')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('name', SITE_NAME)
+    .maybeSingle();
+  if (existing) return (existing as { id: string }).id;
+
+  const { data: created, error } = await supabase
+    .from('sites')
+    .insert({ company_id: companyId, name: SITE_NAME, status: 'active' })
+    .select('id')
+    .single();
+  if (error || !created) throw new Error(`Failed to create e2e site: ${error?.message}`);
+  return (created as { id: string }).id;
+}
+
+// permissions catalog is global — safe to look up once and reuse across roles.
+async function loadPermissionMap(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+): Promise<Map<string, string>> {
+  const { data, error } = await supabase.from('permissions').select('id, key');
+  if (error || !data) throw new Error(`Failed to load permissions: ${error?.message}`);
+  return new Map((data as Array<{ id: string; key: string }>).map((p) => [p.key, p.id]));
+}
+
+// Mirrors CompanyService.provision()'s ADMIN_EXCLUDED_PERMISSIONS — e2e_admin
+// gets every permission except the deliberate per-role overrides, same as a
+// real bootstrapped Administrator. This is also what makes e2e_admin a valid
+// secondary "no PHI by default, even for an otherwise broad role" check.
+const ADMIN_EXCLUDED_PERMISSIONS = new Set([
+  'force_archive_study',
+  'force_archive_site',
+  'reopen_visit',
+  'view_subject_phi',
+  'edit_subject_phi',
+]);
+
+const BASE_ACCESS_PERMISSIONS = [
+  'view_dashboard',
+  'view_studies',
+  'view_subjects',
+  'view_visits',
+  'view_all_sites',
+];
+
+async function findOrCreateRole(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  companyId: string,
+  key: string,
+  name: string,
+  permissionKeys: string[],
+  permissionMap: Map<string, string>,
+): Promise<string> {
+  const { data: existing } = await supabase
+    .from('roles')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('key', key)
+    .maybeSingle();
+
+  const roleId = existing
+    ? (existing as { id: string }).id
+    : await (async () => {
+        const { data: created, error } = await supabase
+          .from('roles')
+          .insert({ company_id: companyId, key, name, description: name, is_system_role: false })
+          .select('id')
+          .single();
+        if (error || !created) throw new Error(`Failed to create role ${key}: ${error?.message}`);
+        return (created as { id: string }).id;
+      })();
+
+  const permissionIds = permissionKeys
+    .map((k) => permissionMap.get(k))
+    .filter((id): id is string => Boolean(id));
+
+  if (permissionIds.length > 0) {
+    await supabase.from('role_permissions').upsert(
+      permissionIds.map((permissionId) => ({
+        company_id: companyId,
+        role_id: roleId,
+        permission_id: permissionId,
+        allowed: true,
+      })),
+      { onConflict: 'company_id,role_id,permission_id', ignoreDuplicates: true },
+    );
+  }
+
+  return roleId;
+}
+
+async function findOrCreateUser(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  companyId: string,
+  roleId: string,
+  email: string,
+  fullName: string,
+): Promise<string> {
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('email', email)
+    .maybeSingle();
+
+  let userId: string;
+  if (existingProfile) {
+    userId = (existingProfile as { id: string }).id;
+  } else {
+    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password: E2E_PASSWORD,
+      email_confirm: true,
+    });
+    if (authError || !authUser.user) {
+      throw new Error(`Failed to create e2e auth user ${email}: ${authError?.message}`);
+    }
+    userId = authUser.user.id;
+
+    const { error: profileError } = await supabase.from('profiles').insert({
+      id: userId,
+      company_id: companyId,
+      full_name: fullName,
+      email,
+      status: 'active',
+    });
+    if (profileError) {
+      throw new Error(`Failed to create profile for ${email}: ${profileError.message}`);
+    }
+  }
+
+  await supabase
+    .from('user_roles')
+    .upsert(
+      { company_id: companyId, user_id: userId, role_id: roleId },
+      { onConflict: 'user_id,role_id', ignoreDuplicates: true },
+    );
+
+  return userId;
+}
+
+export async function seedIdentityFixtures(): Promise<E2EIdentityFixtures> {
+  const supabase = createAdminSupabaseClient();
+
+  const companyId = await findOrCreateCompany(supabase);
+  const siteId = await findOrCreateSite(supabase, companyId);
+  const permissionMap = await loadPermissionMap(supabase);
+
+  const adminPerms = Array.from(permissionMap.keys()).filter(
+    (k) => !ADMIN_EXCLUDED_PERMISSIONS.has(k),
+  );
+  const phiPerms = [...BASE_ACCESS_PERMISSIONS, 'view_subject_phi', 'edit_subject_phi'];
+  const nophiPerms = [...BASE_ACCESS_PERMISSIONS];
+
+  const adminRoleId = await findOrCreateRole(
+    supabase,
+    companyId,
+    E2E_USERS.admin.roleKey,
+    'E2E Admin',
+    adminPerms,
+    permissionMap,
+  );
+  const phiRoleId = await findOrCreateRole(
+    supabase,
+    companyId,
+    E2E_USERS.phi.roleKey,
+    'E2E PHI User',
+    phiPerms,
+    permissionMap,
+  );
+  const nophiRoleId = await findOrCreateRole(
+    supabase,
+    companyId,
+    E2E_USERS.nophi.roleKey,
+    'E2E No-PHI User',
+    nophiPerms,
+    permissionMap,
+  );
+
+  const adminUserId = await findOrCreateUser(
+    supabase,
+    companyId,
+    adminRoleId,
+    E2E_USERS.admin.email,
+    'E2E Admin',
+  );
+  const phiUserId = await findOrCreateUser(
+    supabase,
+    companyId,
+    phiRoleId,
+    E2E_USERS.phi.email,
+    'E2E PHI User',
+  );
+  const nophiUserId = await findOrCreateUser(
+    supabase,
+    companyId,
+    nophiRoleId,
+    E2E_USERS.nophi.email,
+    'E2E No-PHI User',
+  );
+
+  return {
+    companyId,
+    siteId,
+    siteName: SITE_NAME,
+    users: {
+      admin: { userId: adminUserId, email: E2E_USERS.admin.email, password: E2E_PASSWORD },
+      phi: { userId: phiUserId, email: E2E_USERS.phi.email, password: E2E_PASSWORD },
+      nophi: { userId: nophiUserId, email: E2E_USERS.nophi.email, password: E2E_PASSWORD },
+    },
+  };
+}

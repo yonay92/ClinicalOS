@@ -27,6 +27,18 @@ const OVERRIDE_PERMISSIONS: Array<{ key: string; label: string; description: str
     label: 'Force Archive Site',
     description: 'archive a site that still has enrolled subjects, bypassing the normal block',
   },
+  {
+    key: 'view_subject_phi',
+    label: 'View Subject PHI',
+    description:
+      'view subject contact information (name, DOB, phone, email) and appointment confirmation details',
+  },
+  {
+    key: 'edit_subject_phi',
+    label: 'Edit Subject PHI',
+    description:
+      'edit subject contact information and log appointment confirmation contact attempts',
+  },
 ];
 
 type ApiRolesResponse = {

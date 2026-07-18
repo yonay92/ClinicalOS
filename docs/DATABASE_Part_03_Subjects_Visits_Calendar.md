@@ -274,7 +274,103 @@ Monitoring/Sponsor/Training = `calendar_events` only.
 
 ---
 
-## 12. Automation
+## 12. Table: subject_contact_info
+
+Internal CTMS PHI — one row per subject, kept in its own table (rather than columns on
+`subjects`) so RLS enforces the PHI permission at the database level regardless of which
+application query touches `subjects`.
+
+```sql
+subject_contact_info
+- id uuid primary key
+- company_id uuid references companies(id)
+- site_id uuid references sites(id)
+- subject_id uuid unique references subjects(id)
+- first_name text not null
+- last_name text not null
+- date_of_birth date not null
+- sex text not null
+- phone_primary text not null
+- phone_secondary text
+- email text
+- preferred_language text not null
+- preferred_contact_method text not null default 'phone'  -- phone | email | sms
+- voicemail_permission boolean not null default false
+- best_time_to_contact text
+- created_by uuid references profiles(id)
+- updated_by uuid references profiles(id)
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+```
+
+### Rule
+
+Gated by `view_subject_phi` (SELECT) / `edit_subject_phi` (INSERT, UPDATE) — separate from
+`view_subjects` / `edit_subject`, and not included in the Administrator role's default
+permission grant (see §8 permissions in DATABASE_Part_01, force_archive_study override
+pattern). Saving the first contact info for a subject auto-generates `subjects.initials`
+if not already set.
+
+---
+
+## 13. Table: appointment_confirmations
+
+1:1 with `visits`, deliberately separate from `visits.status` — contacting a patient about an
+upcoming visit must never change the clinical visit lifecycle (Confirm/Start/Reschedule/Cancel/
+Reopen, driven entirely by `VisitService` and untouched by this table).
+
+```sql
+appointment_confirmations
+- id uuid primary key
+- company_id uuid references companies(id)
+- site_id uuid references sites(id)
+- visit_id uuid unique references visits(id)
+- confirmation_status text not null default 'not_contacted'
+  -- not_contacted | attempted | confirmed | left_voicemail | requested_reschedule | unable_to_reach
+- last_contacted_at timestamptz
+- last_contacted_by uuid references profiles(id)
+- contact_attempt_count integer not null default 0
+- contact_notes text
+- next_contact_at timestamptz
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+```
+
+### Rule
+
+Gated by `view_subject_phi` / `edit_subject_phi`, same as `subject_contact_info`. Every write
+goes through `AppointmentConfirmationService.logContact`, which also appends a row to
+`appointment_confirmation_log` and a `subject_timeline` entry (status/outcome only — no PHI).
+
+---
+
+## 14. Table: appointment_confirmation_log
+
+Append-only per-attempt log backing `appointment_confirmations.contact_attempt_count` — same
+role `visit_history` plays for `visits.status`.
+
+```sql
+appointment_confirmation_log
+- id uuid primary key
+- company_id uuid references companies(id)
+- visit_id uuid references visits(id)
+- contact_method text
+- old_status text
+- new_status text not null
+- notes text
+- contacted_by uuid references profiles(id)
+- contacted_at timestamptz default now()
+```
+
+### Rule
+
+Gated by `view_subject_phi` (SELECT) / `edit_subject_phi` (INSERT) — carries `contact_notes`,
+so unlike `visit_history` it is PHI and cannot reuse a `view_visits`/`manage_visits`-level
+policy. No UPDATE/DELETE policy: rows are immutable once written.
+
+---
+
+## 15. Automation
 
 ```text
 Subject Created
@@ -308,7 +404,7 @@ Visit Completed
 
 ---
 
-## 13. Implementation Notes for Claude
+## 16. Implementation Notes for Claude
 
 - Rescheduling a visit must update the related calendar event.
 - Cancelled visits should not be deleted.

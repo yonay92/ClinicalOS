@@ -8,10 +8,19 @@ import { SubjectVisitsList } from '@/components/subjects/SubjectVisitsList';
 import { SubjectTimeline } from '@/components/subjects/SubjectTimeline';
 import { SubjectNotes } from '@/components/subjects/SubjectNotes';
 import { SubjectDocuments } from '@/components/subjects/SubjectDocuments';
+import { SubjectContactInfo } from '@/components/subjects/SubjectContactInfo';
 import type { Subject, Visit, SubjectStatusHistory } from '@/types/subjects';
 import type { VisitTemplateItem, VisitTemplateWithItems } from '@/types/studies';
 
-const TABS = ['Overview', 'Visits', 'Timeline', 'Notes', 'Documents', 'History'] as const;
+const TABS = [
+  'Overview',
+  'Visits',
+  'Timeline',
+  'Notes',
+  'Documents',
+  'Contact Info',
+  'History',
+] as const;
 type Tab = (typeof TABS)[number];
 
 export default function SubjectProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -175,6 +184,7 @@ export default function SubjectProfilePage({ params }: { params: Promise<{ id: s
       {tab === 'Timeline' && <SubjectTimeline subjectId={subject.id} />}
       {tab === 'Notes' && <SubjectNotes subjectId={subject.id} />}
       {tab === 'Documents' && <SubjectDocuments subjectId={subject.id} />}
+      {tab === 'Contact Info' && <SubjectContactInfo subjectId={subject.id} />}
 
       {tab === 'History' && (
         <div className="space-y-2">

@@ -347,12 +347,51 @@ export const createUnscheduledVisitSchema = z.object({
 
 export type CreateUnscheduledVisitSchema = z.infer<typeof createUnscheduledVisitSchema>;
 
+// ── Subject Contact Info (PHI) ───────────────────────────────────────────────
+
+export const upsertSubjectContactInfoSchema = z.object({
+  first_name: z.string().min(1, 'First name is required').max(200).trim(),
+  last_name: z.string().min(1, 'Last name is required').max(200).trim(),
+  date_of_birth: z.string().date(),
+  sex: z.string().min(1, 'Sex is required').max(50).trim(),
+  phone_primary: z.string().min(1, 'Primary phone is required').max(20).trim(),
+  phone_secondary: z.string().max(20).trim().optional(),
+  email: z.string().email('Invalid email address').toLowerCase().trim().optional(),
+  preferred_language: z.string().min(1, 'Preferred language is required').max(100).trim(),
+  preferred_contact_method: z.enum(['phone', 'email', 'sms']),
+  voicemail_permission: z.boolean(),
+  best_time_to_contact: z.string().max(200).trim().optional(),
+});
+
+export type UpsertSubjectContactInfoSchema = z.infer<typeof upsertSubjectContactInfoSchema>;
+
+// ── Appointment Confirmation ─────────────────────────────────────────────────
+
+export const logContactAttemptSchema = z.object({
+  confirmation_status: z.enum([
+    'not_contacted',
+    'attempted',
+    'confirmed',
+    'left_voicemail',
+    'requested_reschedule',
+    'unable_to_reach',
+  ]),
+  contact_method: z.enum(['phone', 'email']).optional(),
+  notes: z.string().max(2000).trim().optional(),
+  next_contact_at: z.string().datetime().optional(),
+});
+
+export type LogContactAttemptSchema = z.infer<typeof logContactAttemptSchema>;
+
 // ── Calendar ──────────────────────────────────────────────────────────────────
 
 export const listCalendarEventsSchema = z.object({
   start: z.string().date(),
   end: z.string().date(),
   site_id: z.string().uuid().optional(),
+  study_id: z.string().uuid().optional(),
+  status: z.enum(['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled']).optional(),
+  crc_user_id: z.string().uuid().optional(),
 });
 
 export type ListCalendarEventsSchema = z.infer<typeof listCalendarEventsSchema>;

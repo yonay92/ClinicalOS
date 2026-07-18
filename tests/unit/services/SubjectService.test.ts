@@ -341,13 +341,16 @@ describe('SubjectService.completeBaselineVisit', () => {
       { data: [baselineVisit] }, // visits (current, for lock check — Week 4 doesn't exist for this subject's current-visits query used by the lock check)
       { data: null }, // visits update (mark Baseline completed again)
       { data: null }, // visit_history insert
+      { data: null }, // calendar_events select (Baseline's own event — existing check)
+      { data: null }, // calendar_events insert (self-heal — none existed)
       { data: updatedSubjectRow }, // subjects update (new baseline_date)
       { data: null }, // subject_timeline insert (baseline_visit_completed)
       { data: { id: 'template-uuid' } }, // generateVisitSchedule: visit_templates lookup
       { data: [baselineItem, week4Item] }, // generateVisitSchedule: visit_template_items
       { data: [existingWeek4Visit] }, // generateVisitSchedule: existing visits for downstream items
       { data: recalculatedWeek4Visit }, // generateVisitSchedule: visits update (recalculate Week 4)
-      { data: null }, // generateVisitSchedule: calendar_events update
+      { data: { id: 'event-week4-uuid' } }, // calendar_events select (Week 4's event — already exists)
+      { data: null }, // calendar_events update (recalculate Week 4's date)
       { data: null }, // generateVisitSchedule: subject_timeline insert
     );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
@@ -368,7 +371,7 @@ describe('SubjectService.completeBaselineVisit', () => {
     const visitsCalls = fromMock.mock.calls.filter(([table]) => table === 'visits');
     expect(visitsCalls).toHaveLength(4);
 
-    const week4UpdateStub = fromMock.mock.results[11]?.value as {
+    const week4UpdateStub = fromMock.mock.results[13]?.value as {
       update: ReturnType<typeof vi.fn>;
       insert: ReturnType<typeof vi.fn>;
     };
@@ -376,6 +379,17 @@ describe('SubjectService.completeBaselineVisit', () => {
     const updateArg = (week4UpdateStub.update as ReturnType<typeof vi.fn>).mock
       .calls[0]?.[0] as Record<string, unknown>;
     expect(updateArg.target_date).toBe('2026-02-17');
+
+    // Week 4's calendar event was recalculated in place (matched by
+    // related_record_type='visits' + related_record_id), not duplicated.
+    const week4CalendarUpdateStub = fromMock.mock.results[15]?.value as {
+      update: ReturnType<typeof vi.fn>;
+      insert: ReturnType<typeof vi.fn>;
+    };
+    expect(week4CalendarUpdateStub.insert).not.toHaveBeenCalled();
+    const calendarUpdateArg = (week4CalendarUpdateStub.update as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as Record<string, unknown>;
+    expect(calendarUpdateArg.start_datetime).toBe('2026-02-17T00:00:00Z');
   });
 
   it('throws BusinessRuleError when the approved template has no Baseline item configured', async () => {
@@ -506,6 +520,8 @@ describe('SubjectService.completeBaselineVisit', () => {
       { data: [baselineVisit] }, // visits (subject's current visits)
       { data: null }, // visits update (mark completed)
       { data: null }, // visit_history insert
+      { data: null }, // calendar_events select (existing check)
+      { data: null }, // calendar_events insert (self-heal — none existed)
       { data: updatedSubjectRow }, // subjects update (baseline_date)
       { data: null }, // subject_timeline insert (baseline_visit_completed)
       { data: null }, // generateVisitSchedule: visit_templates lookup -> none, short-circuits
@@ -791,6 +807,8 @@ describe('SubjectService.completeVisit', () => {
       { data: [week4Visit] }, // visits (all)
       { data: completedVisit }, // visits update
       { data: null }, // visit_history insert
+      { data: null }, // calendar_events select (existing check)
+      { data: null }, // calendar_events insert (self-heal — none existed)
       { data: null }, // subject_timeline insert
     );
     vi.mocked(createServerSupabaseClient).mockResolvedValue(client);

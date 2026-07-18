@@ -464,15 +464,11 @@ export const SubjectService = {
       if (error) throw new DatabaseError(error.message);
       if (updated) touched.push(updated as Visit);
 
-      await supabase
-        .from('calendar_events')
-        .update({
-          start_datetime: `${recalc.target_date}T00:00:00Z`,
-          end_datetime: `${recalc.target_date}T00:00:00Z`,
-        })
-        .eq('related_record_type', 'visits')
-        .eq('related_record_id', recalc.id)
-        .eq('company_id', ctx.company.id);
+      if (updated) {
+        await VisitService.upsertCalendarEventForVisit(updated as Visit, ctx, {
+          target_date: recalc.target_date,
+        });
+      }
     }
 
     if (touched.length > 0) {
@@ -598,6 +594,12 @@ export const SubjectService = {
       changed_by: ctx.user.id,
     });
 
+    await VisitService.upsertCalendarEventForVisit(
+      { ...baselineVisit, target_date: input.baseline_date },
+      ctx,
+      { status: 'completed', target_date: input.baseline_date },
+    );
+
     const { data: updated, error } = await supabase
       .from('subjects')
       .update({ baseline_date: input.baseline_date })
@@ -706,6 +708,8 @@ export const SubjectService = {
       new_status: 'completed',
       changed_by: ctx.user.id,
     });
+
+    await VisitService.upsertCalendarEventForVisit(updated as Visit, ctx, { status: 'completed' });
 
     await this.addTimelineEvent(
       subjectId,

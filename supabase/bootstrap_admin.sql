@@ -82,9 +82,10 @@ BEGIN
   -- ------------------------------------------------------------
   -- 2b. Administrator role — grant every permission except the ones that
   -- must be deliberately elevated (force_archive_study / force_archive_site /
-  -- reopen_visit are conscious, per-role overrides a company owner grants via
-  -- Settings > Roles — it would defeat the purpose of those safeguards if
-  -- every admin got them free).
+  -- reopen_visit / view_subject_phi / edit_subject_phi are conscious,
+  -- per-role overrides a company owner grants via Settings > Roles — it
+  -- would defeat the purpose of those safeguards if every admin got them
+  -- free; PHI access in particular should never be an automatic default).
   -- Mirrors CompanyService.provision()'s adminPerms (all permission keys
   -- minus the same exclusion list).
   -- Without this step, a fresh admin role has zero role_permissions rows
@@ -94,7 +95,10 @@ BEGIN
   INSERT INTO role_permissions (company_id, role_id, permission_id, allowed)
   SELECT v_company_id, v_admin_role_id, p.id, true
   FROM permissions p
-  WHERE p.key NOT IN ('force_archive_study', 'force_archive_site', 'reopen_visit')
+  WHERE p.key NOT IN (
+    'force_archive_study', 'force_archive_site', 'reopen_visit',
+    'view_subject_phi', 'edit_subject_phi'
+  )
   ON CONFLICT (company_id, role_id, permission_id) DO NOTHING;
 
   -- ------------------------------------------------------------

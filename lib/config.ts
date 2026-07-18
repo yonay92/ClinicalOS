@@ -7,9 +7,3 @@ export const config = {
     url: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
   },
 } as const;
-
-export const serverConfig = {
-  supabase: {
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  },
-} as const;

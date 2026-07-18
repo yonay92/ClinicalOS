@@ -40,8 +40,12 @@ function AcceptInvitationForm() {
             (json as { success: false; message: string }).message ??
               'Invalid or expired invitation.',
           );
-        } else if (json.success && json.data.valid) {
+        } else if (json.data.valid) {
           setValidEmail(json.data.email);
+        } else {
+          // json.success is true but data.valid is false — a structurally
+          // valid response for an unknown/expired token, not a request error.
+          setTokenError('Invalid or expired invitation.');
         }
       })
       .catch(() => {

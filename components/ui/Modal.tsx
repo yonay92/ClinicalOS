@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 
 interface ModalProps {
@@ -18,6 +18,12 @@ const SIZE_CLASSES = {
 } as const;
 
 export function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
+  // A static id here would collide when a modal opens another modal (e.g. the
+  // Log Contact Attempt modal over the Visit Detail modal) — both dialogs'
+  // aria-labelledby would resolve to whichever <h2 id="modal-title"> comes
+  // first in the DOM, leaving one of them with the wrong accessible name.
+  const titleId = useId();
+
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -44,11 +50,11 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
         className={`relative w-full ${SIZE_CLASSES[size]} rounded-xl bg-white shadow-xl`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? 'modal-title' : undefined}
+        aria-labelledby={title ? titleId : undefined}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           {title ? (
-            <h2 id="modal-title" className="text-base font-semibold text-slate-900">
+            <h2 id={titleId} className="text-base font-semibold text-slate-900">
               {title}
             </h2>
           ) : (

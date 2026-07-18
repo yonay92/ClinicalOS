@@ -19,7 +19,24 @@ Tabs:
 - Timeline
 - Notes
 - Documents
+- Contact Info
 - History
+
+### Contact Info tab
+
+Name, date of birth, sex, phone (primary/secondary), email, preferred language, preferred
+contact method, voicemail permission, and best time to contact — read-only display with an Edit
+action, or an inline "Add contact information" form when nothing is on file yet.
+
+Gated by the `view_subject_phi` / `edit_subject_phi` permissions, not `view_subjects` /
+`edit_subject`. Like `reopen_visit` and `force_archive_*`, neither permission is included in the
+Administrator role's default grant — a company owner must consciously enable them per-role from
+Settings > Roles. A user without `view_subject_phi` does not see the tab's contents (shown as
+Restricted); without `edit_subject_phi` they see the data read-only with no Edit action.
+
+Saving contact info auto-generates the subject's `initials` (first + last initial) the first
+time it's saved, if the subject doesn't already have any — initials are not PHI-gated, since
+the Calendar already shows them to any caller with `view_visits`.
 
 ## Header
 

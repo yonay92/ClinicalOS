@@ -15,6 +15,9 @@ export async function GET(request: NextRequest) {
     start: searchParams.get('start') ?? undefined,
     end: searchParams.get('end') ?? undefined,
     site_id: searchParams.get('site_id') ?? undefined,
+    study_id: searchParams.get('study_id') ?? undefined,
+    status: searchParams.get('status') ?? undefined,
+    crc_user_id: searchParams.get('crc_user_id') ?? undefined,
   });
   if (!validated.success) {
     return errorResponse('VALIDATION_ERROR', 400, { issues: validated.error.issues });

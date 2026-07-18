@@ -58,11 +58,3 @@ export class ValidationError extends AppError {
     super(message, 'VALIDATION_ERROR');
   }
 }
-
-export class AIReviewRequiredError extends AppError {
-  readonly request_id: string;
-  constructor(request_id: string) {
-    super('AI response requires review before applying', 'AI_REVIEW_REQUIRED');
-    this.request_id = request_id;
-  }
-}

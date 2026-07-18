@@ -380,6 +380,43 @@ describe('VisitService — company isolation', () => {
     expect(companyEq).toBeDefined();
     expect(companyEq![1]).toBe(COMPANY_A);
   });
+
+  it('listCalendarEvents() with a study_id filter scopes the visit-id resolution to company_id too, not just the final query', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await VisitService.listCalendarEvents(
+      { start: '2026-02-01', end: '2026-02-28', study_id: 'study-x' },
+      makeCtx(COMPANY_A),
+    );
+
+    // Study/CRC filters resolve through a separate `visits` (and, for CRC,
+    // `study_staff`) query before narrowing calendar_events — every one of
+    // those must stay scoped to the caller's company, not just the final read.
+    const companyEqCalls = eqCalls.filter(([col]) => col === 'company_id');
+    expect(companyEqCalls.length).toBeGreaterThanOrEqual(2);
+    for (const call of companyEqCalls) {
+      expect(call[1]).toBe(COMPANY_A);
+    }
+  });
+
+  it('listCalendarEvents() with a crc_user_id filter scopes the study_staff lookup to company_id', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await VisitService.listCalendarEvents(
+      { start: '2026-02-01', end: '2026-02-28', crc_user_id: 'user-x' },
+      makeCtx(COMPANY_A),
+    );
+
+    const companyEqCalls = eqCalls.filter(([col]) => col === 'company_id');
+    expect(companyEqCalls.length).toBeGreaterThanOrEqual(2);
+    for (const call of companyEqCalls) {
+      expect(call[1]).toBe(COMPANY_A);
+    }
+  });
 });
 
 // ── AIDraftService ──────────────────────────────────────────────────────────

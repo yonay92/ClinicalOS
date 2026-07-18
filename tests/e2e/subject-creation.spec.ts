@@ -1,11 +1,22 @@
 /**
- * E2E tests: Subject list & creation flows
- * Runs against the Next.js dev/prod server (baseURL from playwright.config.ts).
- * Requires an authenticated session — these specs assume login is handled by
- * a shared auth setup (see playwright.config.ts storageState) once one exists;
- * until then they document and exercise the golden path against /subjects.
+ * E2E tests: Subject list & creation flows.
+ * Runs authenticated as the e2e admin persona (tests/e2e/.auth/admin.json,
+ * provisioned by tests/e2e/global-setup.ts) — every route here sits behind
+ * middleware auth, so an unauthenticated run never gets past a /login
+ * redirect. See tests/e2e/README.md for the full fixture design.
  */
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { scaffoldActiveStudy } from './helpers/apiScaffold';
+
+const AUTH_DIR = join(__dirname, '.auth');
+
+test.use({ storageState: join(AUTH_DIR, 'admin.json') });
+
+const fixtures = JSON.parse(readFileSync(join(AUTH_DIR, 'fixtures.json'), 'utf-8')) as {
+  siteName: string;
+};
 
 test.describe('Subjects list', () => {
   test('renders the subjects page with a New Subject action', async ({ page }) => {
@@ -23,21 +34,63 @@ test.describe('Subject creation', () => {
     await expect(page.getByText('Study is required')).toBeVisible();
   });
 
-  test('blocks creation with a clear error when the study has no approved visit template', async ({
+  // Replaces a prior placeholder of the same intent ("blocks creation... no
+  // approved visit template") that never actually triggered the block — it
+  // only asserted the form's fields render. That business rule is already
+  // covered directly at tests/unit/services/SubjectService.test.ts and
+  // tests/integration/subject-creation.test.ts; it's also unreachable from
+  // this form specifically, since /subjects/new only lists status=active
+  // studies and a study cannot become active without an approved template
+  // (StudyService.activateStudy) — so there's no way to reach "active study,
+  // no approved template" through the UI to begin with. What the UI *can*
+  // meaningfully cover, and previously had zero real coverage of, is the
+  // golden path itself.
+  test('creates a subject against a freshly activated study and redirects to its profile', async ({
     page,
   }) => {
-    // Golden-path assertion only — the full create -> profile redirect flow requires
-    // a seeded active study with an approved visit template and is covered at the
-    // service layer in tests/unit/services and tests/integration; this spec verifies
-    // the form renders its required fields and surfaces the business-rule error text.
-    //
-    // Site visibility is not asserted here — whether the Site selector or a
-    // read-only auto-assigned site line renders depends on how many sites the
-    // logged-in user has access to (see SubjectService/site-auto-assign coverage
-    // in the Subject creation form), which this unauthenticated placeholder spec
-    // cannot control.
+    const runId = Date.now();
+    const studyName = `E2E Subject-Creation Study ${runId}`;
+
+    const sitesRes = await page.request.get('/api/sites');
+    const sites = ((await sitesRes.json()) as { data: Array<{ id: string; name: string }> }).data;
+    const site = sites.find((s) => s.name === fixtures.siteName);
+    expect(site).toBeTruthy();
+
+    await scaffoldActiveStudy(page.request, {
+      studyName,
+      siteId: site!.id,
+      items: [
+        {
+          visit_name: 'Baseline',
+          visit_order: 0,
+          offset_days: 0,
+          window_before: 0,
+          window_after: 0,
+          visit_type: 'scheduled',
+          is_baseline: true,
+          is_required: true,
+        },
+      ],
+    });
+
     await page.goto('/subjects/new');
-    await expect(page.getByLabel('Subject number')).toBeVisible();
-    await expect(page.getByLabel('Study')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'New Subject' })).toBeVisible();
+
+    await page.getByLabel('Study').selectOption({ label: studyName });
+
+    // The seeded site auto-fills as read-only text when it's the caller's
+    // only site; it only renders as a <select> once a second site exists —
+    // handle both so this doesn't depend on how many sites have accumulated.
+    const siteSelect = page.getByLabel('Site');
+    if (await siteSelect.count()) {
+      await siteSelect.selectOption({ label: fixtures.siteName });
+    } else {
+      await expect(page.getByText(fixtures.siteName)).toBeVisible();
+    }
+
+    await page.getByLabel('Subject number').fill(`E2E-SC-${runId}`);
+    await page.getByRole('button', { name: 'Create Subject' }).click();
+
+    await expect(page).toHaveURL(/\/subjects\/[0-9a-f-]{36}$/, { timeout: 10000 });
   });
 });
