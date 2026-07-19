@@ -206,6 +206,10 @@ export const CompanyService = {
       'view_documents',
       'view_tasks',
       'complete_task',
+      'view_leads',
+      'create_lead',
+      'edit_lead',
+      'convert_lead',
     ]
       .map((k) => permMap.get(k))
       .filter(Boolean) as string[];

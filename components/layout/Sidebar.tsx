@@ -78,6 +78,20 @@ const NAV_ITEMS: NavItem[] = [
     permission: 'view_subjects',
   },
   {
+    label: 'Recruitment',
+    href: '/recruitment',
+    icon: (
+      <svg {...ICON_PROPS}>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M18 9a3 3 0 11-6 0 3 3 0 016 0zM9 21a6 6 0 0112 0M3 21a6 6 0 016-9"
+        />
+      </svg>
+    ),
+    permission: 'view_leads',
+  },
+  {
     label: 'Calendar',
     href: '/calendar',
     icon: (

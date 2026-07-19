@@ -63,4 +63,11 @@ export type PermissionKey =
   | 'force_archive_site'
   | 'reopen_visit'
   | 'view_subject_phi'
-  | 'edit_subject_phi';
+  | 'edit_subject_phi'
+  | 'view_leads'
+  | 'create_lead'
+  | 'edit_lead'
+  | 'view_lead_phi'
+  | 'edit_lead_phi'
+  | 'convert_lead'
+  | 'manage_referral_sources';

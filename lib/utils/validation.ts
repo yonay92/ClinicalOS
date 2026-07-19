@@ -419,3 +419,152 @@ export const listSubjectsSchema = z.object({
 export const listInvitationsSchema = z.object({
   status: z.enum(['pending', 'accepted', 'expired', 'revoked']).optional(),
 });
+
+// ── Recruitment: Leads ───────────────────────────────────────────────────────
+
+const LEAD_STATUSES = [
+  'new',
+  'contacted',
+  'prescreening',
+  'waitlisted',
+  'converted',
+  'declined',
+  'lost',
+] as const;
+
+export const createLeadSchema = z.object({
+  site_id: z.string().uuid().optional(),
+  study_id: z.string().uuid().optional(),
+  referral_source_id: z.string().uuid().optional(),
+});
+
+export type CreateLeadSchema = z.infer<typeof createLeadSchema>;
+
+export const updateLeadSchema = z.object({
+  site_id: z.string().uuid().nullable().optional(),
+  study_id: z.string().uuid().nullable().optional(),
+  referral_source_id: z.string().uuid().nullable().optional(),
+});
+
+export type UpdateLeadSchema = z.infer<typeof updateLeadSchema>;
+
+export const listLeadsSchema = z.object({
+  status: z.enum(LEAD_STATUSES).optional(),
+  site_id: z.string().uuid().optional(),
+  study_id: z.string().uuid().optional(),
+  referral_source_id: z.string().uuid().optional(),
+});
+
+export const logLeadContactSchema = z.object({
+  new_status: z.enum(LEAD_STATUSES),
+  contact_method: z.enum(['phone', 'email', 'sms']).optional(),
+  notes: z.string().max(2000).trim().optional(),
+  next_contact_at: z.string().datetime().optional(),
+});
+
+export type LogLeadContactSchema = z.infer<typeof logLeadContactSchema>;
+
+export const waitlistLeadSchema = z.object({
+  notes: z.string().max(2000).trim().optional(),
+});
+
+export const declineLeadSchema = z.object({
+  declined_reason: z.string().min(1, 'A reason is required').max(1000).trim(),
+});
+
+export type DeclineLeadSchema = z.infer<typeof declineLeadSchema>;
+
+export const convertLeadSchema = z.object({
+  subject_number: z.string().min(1, 'Subject number is required').max(50).trim(),
+  screening_date: z.string().date().optional(),
+});
+
+export type ConvertLeadSchema = z.infer<typeof convertLeadSchema>;
+
+// ── Recruitment: Lead Contact Info (PHI) ──────────────────────────────────────
+
+export const upsertLeadContactInfoSchema = z.object({
+  first_name: z.string().min(1, 'First name is required').max(200).trim(),
+  last_name: z.string().min(1, 'Last name is required').max(200).trim(),
+  date_of_birth: z.string().date().optional(),
+  sex: z.string().max(50).trim().optional(),
+  phone_primary: z.string().min(1, 'Primary phone is required').max(20).trim(),
+  phone_secondary: z.string().max(20).trim().optional(),
+  email: z.string().email('Invalid email address').toLowerCase().trim().optional(),
+  preferred_contact_method: z.enum(['phone', 'email', 'sms']),
+});
+
+export type UpsertLeadContactInfoSchema = z.infer<typeof upsertLeadContactInfoSchema>;
+
+// ── Recruitment: Referral Sources ─────────────────────────────────────────────
+
+const REFERRAL_SOURCE_CATEGORIES = [
+  'physician_referral',
+  'advertisement',
+  'patient_database',
+  'self_referral',
+  'social_media',
+  'other',
+] as const;
+
+export const createReferralSourceSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200).trim(),
+  category: z.enum(REFERRAL_SOURCE_CATEGORIES),
+});
+
+export type CreateReferralSourceSchema = z.infer<typeof createReferralSourceSchema>;
+
+export const updateReferralSourceSchema = z.object({
+  name: z.string().min(1).max(200).trim().optional(),
+  category: z.enum(REFERRAL_SOURCE_CATEGORIES).optional(),
+  active: z.boolean().optional(),
+});
+
+export type UpdateReferralSourceSchema = z.infer<typeof updateReferralSourceSchema>;
+
+// ── Recruitment: Prescreening ─────────────────────────────────────────────────
+
+export const createPrescreeningQuestionSchema = z.object({
+  question_order: z.number().int().min(0),
+  question_text: z.string().min(1, 'Question text is required').max(1000).trim(),
+  question_type: z.enum(['yes_no', 'number', 'text']),
+  eligible_answer: z.string().max(100).trim().optional(),
+  min_eligible_value: z.number().optional(),
+  max_eligible_value: z.number().optional(),
+  is_hard_exclusion: z.boolean().optional(),
+});
+
+export type CreatePrescreeningQuestionSchema = z.infer<typeof createPrescreeningQuestionSchema>;
+
+export const updatePrescreeningQuestionSchema = z.object({
+  question_order: z.number().int().min(0).optional(),
+  question_text: z.string().min(1).max(1000).trim().optional(),
+  eligible_answer: z.string().max(100).trim().optional(),
+  min_eligible_value: z.number().optional(),
+  max_eligible_value: z.number().optional(),
+  is_hard_exclusion: z.boolean().optional(),
+  is_active: z.boolean().optional(),
+});
+
+export type UpdatePrescreeningQuestionSchema = z.infer<typeof updatePrescreeningQuestionSchema>;
+
+export const submitPrescreeningSchema = z.object({
+  study_id: z.string().uuid('Invalid study ID'),
+  answers: z
+    .array(
+      z.object({
+        question_id: z.string().uuid('Invalid question ID'),
+        answer_value: z.string().min(1, 'Answer is required').max(500).trim(),
+      }),
+    )
+    .min(1, 'At least one answer is required'),
+});
+
+export type SubmitPrescreeningSchema = z.infer<typeof submitPrescreeningSchema>;
+
+export const overridePrescreeningSchema = z.object({
+  manual_outcome: z.enum(['potentially_eligible', 'needs_review', 'not_eligible']),
+  manual_override_reason: z.string().min(1, 'A reason is required').max(1000).trim(),
+});
+
+export type OverridePrescreeningSchema = z.infer<typeof overridePrescreeningSchema>;
