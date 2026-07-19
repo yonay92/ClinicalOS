@@ -15,6 +15,7 @@ import { PermissionService } from '@/services/permissions/PermissionService';
 import { AIDraftService } from '@/services/studies/AIDraftService';
 import { SubjectService } from '@/services/subjects/SubjectService';
 import { VisitService } from '@/services/visits/VisitService';
+import { LeadService } from '@/services/recruitment/LeadService';
 import { NotFoundError } from '@/lib/api/errors';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -413,6 +414,52 @@ describe('VisitService — company isolation', () => {
 
     const companyEqCalls = eqCalls.filter(([col]) => col === 'company_id');
     expect(companyEqCalls.length).toBeGreaterThanOrEqual(2);
+    for (const call of companyEqCalls) {
+      expect(call[1]).toBe(COMPANY_A);
+    }
+  });
+});
+
+// ── LeadService ──────────────────────────────────────────────────────────────
+
+describe('LeadService — company isolation', () => {
+  it('getById() scopes the lead lookup to company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient(null, null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(LeadService.getById('lead-other-company', makeCtx(COMPANY_A))).rejects.toThrow(
+      NotFoundError,
+    );
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('list() scopes the pipeline query to company_id from context', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient([]);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await LeadService.list({}, makeCtx(COMPANY_A));
+
+    const companyEq = eqCalls.find(([col]) => col === 'company_id');
+    expect(companyEq).toBeDefined();
+    expect(companyEq![1]).toBe(COMPANY_A);
+  });
+
+  it('logContact() scopes the lead lookup to company_id from context, not just the update', async () => {
+    vi.spyOn(PermissionService, 'requirePermission').mockResolvedValue(undefined);
+    const { client, eqCalls } = makeTrackingClient(null, null);
+    vi.mocked(createServerSupabaseClient).mockResolvedValue(client);
+
+    await expect(
+      LeadService.logContact('lead-other-company', { new_status: 'contacted' }, makeCtx(COMPANY_A)),
+    ).rejects.toThrow(NotFoundError);
+
+    const companyEqCalls = eqCalls.filter(([col]) => col === 'company_id');
+    expect(companyEqCalls.length).toBeGreaterThanOrEqual(1);
     for (const call of companyEqCalls) {
       expect(call[1]).toBe(COMPANY_A);
     }

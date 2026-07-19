@@ -16,6 +16,7 @@ const TABS = [
   'Overview',
   'Sites',
   'Visit Templates',
+  'Prescreening',
   'Documents',
   'AI Review',
   'Subjects',
@@ -157,6 +158,18 @@ export default function StudyProfilePage({ params }: { params: Promise<{ id: str
           </p>
           <Link href={`/studies/${study.id}/visit-templates`}>
             <Button size="sm">Open Visit Template Builder</Button>
+          </Link>
+        </div>
+      )}
+
+      {tab === 'Prescreening' && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <p className="mb-3 text-sm text-gray-500">
+            Configure this study&apos;s eligibility triage questionnaire, used by Recruitment when
+            prescreening leads.
+          </p>
+          <Link href={`/studies/${study.id}/prescreening-questions`}>
+            <Button size="sm">Manage Prescreening Questions</Button>
           </Link>
         </div>
       )}

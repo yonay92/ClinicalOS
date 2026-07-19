@@ -105,6 +105,7 @@ const BASE_ACCESS_PERMISSIONS = [
   'view_subjects',
   'view_visits',
   'view_all_sites',
+  'view_leads',
 ];
 
 async function findOrCreateRole(
@@ -213,7 +214,13 @@ export async function seedIdentityFixtures(): Promise<E2EIdentityFixtures> {
   const adminPerms = Array.from(permissionMap.keys()).filter(
     (k) => !ADMIN_EXCLUDED_PERMISSIONS.has(k),
   );
-  const phiPerms = [...BASE_ACCESS_PERMISSIONS, 'view_subject_phi', 'edit_subject_phi'];
+  const phiPerms = [
+    ...BASE_ACCESS_PERMISSIONS,
+    'view_subject_phi',
+    'edit_subject_phi',
+    'view_lead_phi',
+    'edit_lead_phi',
+  ];
   const nophiPerms = [...BASE_ACCESS_PERMISSIONS];
 
   const adminRoleId = await findOrCreateRole(
